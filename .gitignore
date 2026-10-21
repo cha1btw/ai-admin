@@ -23,3 +23,6 @@ backups/
 .DS_Store
 .idea/
 .vscode/
+
+# Browser tool output (screenshots, console logs)
+.playwright-mcp/

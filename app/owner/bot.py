@@ -69,7 +69,8 @@ async def help_command(message: Message, app: AppContext) -> None:
     async with app.session_factory() as session, session.begin():
         tenant = await actions.current_tenant(session, app, user)
     if tenant is None and not actions.is_admin(app, user):
-        await app.notifier.send(message.chat.id, actions.NOT_LINKED)
+        # The id helps setup: founders put it into ADMIN_TELEGRAM_IDS.
+        await app.notifier.send(message.chat.id, f"{actions.NOT_LINKED}\n\nВаш Telegram id: {user}")
         return
     text = (f"Студія: {tenant.name}\n\n" if tenant else "") + actions.HELP
     if actions.is_admin(app, user):
