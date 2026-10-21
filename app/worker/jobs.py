@@ -277,9 +277,22 @@ async def _digest_text(session, tenant: Tenant, cfg, now: datetime) -> str | Non
 
 
 async def demo_cleanup(app: AppContext) -> None:
-    """Public demo bookings are for testing: removed after a day; idle demo chats after a week."""
+    """Public demo bookings are for testing: removed after a day; idle demo chats after a week.
+    Admin panel test chats go after a day."""
     now = app.clock.now()
     async with app.session_factory() as session, session.begin():
+        test_accounts = select(ChannelAccount.id).where(ChannelAccount.kind == "admin_test")
+        await session.execute(
+            delete(Booking).where(
+                Booking.is_sandbox.is_(True), Booking.created_at < now - timedelta(days=1)
+            )
+        )
+        await session.execute(
+            delete(Client).where(
+                Client.channel_account_id.in_(test_accounts),
+                Client.last_seen_at < now - timedelta(days=1),
+            )
+        )
         demo_ids = list(await session.scalars(select(Tenant.id).where(Tenant.is_demo.is_(True))))
         if not demo_ids:
             return

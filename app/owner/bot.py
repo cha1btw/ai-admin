@@ -188,6 +188,24 @@ async def link(message: Message, command: CommandObject, bot: Bot, app: AppConte
     )
 
 
+async def admin_panel(message: Message, app: AppContext) -> None:
+    if not _admin(message, app):
+        return
+    from app.admin.auth import login_link
+
+    if not app.settings.public_base_url:
+        await app.notifier.send(
+            message.chat.id,
+            "Задайте PUBLIC_BASE_URL у .env. Локально: uv run python -m app.cli admin link",
+        )
+        return
+    await app.notifier.send(
+        message.chat.id,
+        "Вхід в адмінку, посилання одноразове і діє 10 хвилин:\n"
+        + login_link(app.settings, message.from_user.id),
+    )
+
+
 async def pause_all(message: Message, app: AppContext) -> None:
     if _admin(message, app):
         await send_result(
@@ -329,6 +347,7 @@ def build_owner_dispatcher() -> Dispatcher:
     commands.message.register(tenants, Command("tenants"))
     commands.message.register(health, Command("health"))
     commands.message.register(link, Command("link"))
+    commands.message.register(admin_panel, Command("admin"))
     commands.message.register(pause_all, Command("pause_all"))
     commands.message.register(resume_all, Command("resume_all"))
     commands.message.register(forget, Command("forget"))

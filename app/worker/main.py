@@ -42,6 +42,10 @@ async def handle_event(app: AppContext, bots: Bots, event: InboundEvent) -> None
         from app.channels.instagram import handle_instagram_event
 
         await handle_instagram_event(app, event.payload)
+    elif event.source == "lead":
+        from app.owner.notifications import notify_lead
+
+        await notify_lead(app, int(event.payload["lead_id"]))
     else:
         raise RuntimeError(f"no handler for {event.source}")
 

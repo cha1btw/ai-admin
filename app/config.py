@@ -46,6 +46,14 @@ class Settings(BaseSettings):
     encryption_key: SecretStr | None = None
     public_base_url: str | None = None
 
+    # Admin panel and landing
+    admin_session_hours: int = 12
+    landing_origin: str | None = None  # e.g. https://ai-admin.vercel.app (CORS for /leads)
+
+    # Cost estimate in /stats and the admin panel (USD per 1M tokens of the chosen model)
+    llm_price_input_per_m: float | None = None
+    llm_price_output_per_m: float | None = None
+
     # Pipeline tuning
     debounce_seconds: float = 4.0
     worker_poll_interval_s: float = 0.5

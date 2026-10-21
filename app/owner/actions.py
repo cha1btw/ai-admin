@@ -106,7 +106,8 @@ HELP = (
     "/cancel — скасувати поточну дію"
 )
 ADMIN_HELP = (
-    "Для основателей:\n/tenants — студії\n/link <slug> [admin] — посилання для майстра\n"
+    "Для засновників:\n/admin — вхід в адмінку\n/tenants — студії\n"
+    "/link <slug> [admin] — посилання для майстра\n"
     "/health — стан системи\n/pause_all, /resume_all — усі студії\n/forget <client_id> — видалити "
     "дані клієнтки"
 )

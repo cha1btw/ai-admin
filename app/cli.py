@@ -8,6 +8,7 @@ uv run python -m app.cli tenant stats demo_studio --days 14
 uv run python -m app.cli telegram set-webhooks
 uv run python -m app.cli instagram link demo_studio
 uv run python -m app.cli chat demo_studio
+uv run python -m app.cli admin link [--id TELEGRAM_ID]
 """
 
 import argparse
@@ -123,6 +124,22 @@ async def cmd_link(slug: str, role: str) -> int:
     finally:
         await bot.session.close()
     print(f"https://t.me/{me.username}?start={token}")
+    return 0
+
+
+def cmd_admin_link(telegram_id: int | None) -> int:
+    """Login link to the admin panel (same as /admin in Owner Bot)."""
+    from app.admin.auth import login_link
+
+    settings = get_settings()
+    ids = settings.admin_telegram_ids
+    if not ids:
+        print("Задайте ADMIN_TELEGRAM_IDS у .env.", file=sys.stderr)
+        return 1
+    if telegram_id is not None and telegram_id not in ids:
+        print("Цього id немає в ADMIN_TELEGRAM_IDS.", file=sys.stderr)
+        return 1
+    print(login_link(settings, telegram_id or ids[0]))
     return 0
 
 
@@ -266,6 +283,9 @@ def main() -> None:
     instagram = sub.add_parser("instagram", help="Instagram setup")
     instagram.add_argument("action", choices=["link"])
     instagram.add_argument("slug")
+    admin = sub.add_parser("admin", help="admin panel")
+    admin.add_argument("action", choices=["link"])
+    admin.add_argument("--id", type=int, default=None, help="founder's Telegram id")
     args = parser.parse_args()
 
     configure_logging("WARNING")
@@ -275,6 +295,8 @@ def main() -> None:
         code = asyncio.run(cmd_set_webhooks())
     elif args.command == "instagram":
         code = cmd_instagram_link(args.slug)
+    elif args.command == "admin":
+        code = cmd_admin_link(args.id)
     elif args.action == "validate":
         code = asyncio.run(cmd_validate(args.path))
     elif args.action == "load":

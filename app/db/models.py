@@ -404,6 +404,22 @@ class AuditLog(Base):
     created_at: Mapped[datetime] = _created()
 
 
+class Lead(Base):
+    """Request from the landing page: a studio that wants a pilot or another service."""
+
+    __tablename__ = "lead"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(120))
+    business: Mapped[str | None] = mapped_column(String(200))
+    contact: Mapped[str] = mapped_column(String(200))
+    service: Mapped[str | None] = mapped_column(String(64))
+    message: Mapped[str | None] = mapped_column(Text)
+    source: Mapped[str | None] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(16), default="new")  # new|contacted|won|lost
+    created_at: Mapped[datetime] = _created()
+
+
 class JobRun(Base):
     """Makes periodic jobs idempotent, e.g. one morning digest per studio per day."""
 

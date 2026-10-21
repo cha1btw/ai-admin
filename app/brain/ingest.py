@@ -92,8 +92,11 @@ async def record_client_message(
     *,
     debounce: timedelta,
     sandbox: bool = False,
+    schedule: bool = True,
 ) -> Message | None:
-    """Store a client message and schedule a reply. Returns None for a duplicate delivery."""
+    """Store a client message and schedule a reply. Returns None for a duplicate delivery.
+
+    schedule=False leaves the reply to the caller (the admin test chat answers inline)."""
     client, conversation = await get_or_create_conversation(
         session,
         account,
@@ -120,7 +123,8 @@ async def record_client_message(
     session.add(message)
     await session.flush()
     conversation.last_client_message_at = now
-    conversation.reply_due_at = now + debounce
+    if schedule:
+        conversation.reply_due_at = now + debounce
     client.last_seen_at = now
     if client.language is None and inbound.language in ("uk", "ru", "en", "pl"):
         client.language = inbound.language

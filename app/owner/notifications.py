@@ -385,3 +385,40 @@ async def dispatch_events(app: AppContext, events: list[Event]) -> None:
             await app.alerts.send(
                 f"notify:{type(event).__name__}", "Не вдалося надіслати сповіщення майстру."
             )
+
+
+# --- founders ----------------------------------------------------------------------------------
+
+LEAD_SERVICES = {
+    "ai_admin": "AI-адміністратор",
+    "voice": "AI-асистент для дзвінків",
+    "crm": "CRM",
+    "website": "сайт з онлайн-записом",
+    "integration": "інтеграція",
+    "other": "інше",
+}
+
+
+async def notify_lead(app: AppContext, lead_id: int) -> None:
+    """A landing page request goes to every founder."""
+    from app.db.models import Lead
+
+    async with app.session_factory() as session:
+        lead = await session.get(Lead, lead_id)
+    if lead is None:
+        return
+    lines = [
+        f"🔥 Нова заявка з сайту #{lead.id}",
+        f"Ім'я: {lead.name}",
+        f"Контакт: {lead.contact}",
+    ]
+    if lead.business:
+        lines.append(f"Бізнес: {lead.business}")
+    lines.append(f"Цікавить: {LEAD_SERVICES.get(lead.service or 'other', lead.service)}")
+    if lead.message:
+        lines.append(f"Повідомлення: {lead.message}")
+    if lead.source:
+        lines.append(f"Джерело: {lead.source}")
+    lines.append("Статус заявок: /admin → Заявки")
+    for chat_id in app.settings.admin_telegram_ids:
+        await app.notifier.send(chat_id, "\n".join(lines))

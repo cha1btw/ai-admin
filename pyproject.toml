@@ -37,6 +37,7 @@ ignore = ["RUF001", "RUF002", "RUF003"]  # Cyrillic text in bot copy is intentio
 [tool.ruff.lint.per-file-ignores]
 # The bot prompt is prose; wrapping it would change what the model reads.
 "app/brain/prompts.py" = ["E501"]
+"app/admin/importer.py" = ["E501"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

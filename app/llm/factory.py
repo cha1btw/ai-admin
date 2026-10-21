@@ -19,7 +19,10 @@ class UnavailableLLM:
         raise LLMError(self.reason)
 
 
-def build_llm(settings: Settings) -> LLMProvider:
+def build_llm(
+    settings: Settings, *, max_completion_tokens: int | None = None, timeout_s: float | None = None
+) -> LLMProvider:
+    """The overrides serve long one-off jobs such as the studio import in the admin panel."""
     if settings.llm_provider == "fake":
         from app.llm.fake import FakeLLM
 
@@ -31,7 +34,7 @@ def build_llm(settings: Settings) -> LLMProvider:
     return OpenAIProvider(
         api_key=settings.openai_api_key.get_secret_value(),
         model=settings.llm_model,
-        timeout_s=settings.llm_timeout_s,
+        timeout_s=timeout_s or settings.llm_timeout_s,
         temperature=settings.llm_temperature,
-        max_completion_tokens=settings.llm_max_completion_tokens,
+        max_completion_tokens=max_completion_tokens or settings.llm_max_completion_tokens,
     )
