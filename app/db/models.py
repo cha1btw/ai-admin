@@ -26,6 +26,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base import Base
 
 TZ = DateTime(timezone=True)
+# Python None must become SQL NULL, not JSON null, so "IS NULL" filters work.
+NULLABLE_JSON = JSONB(none_as_null=True)
 
 
 def _created() -> Mapped[datetime]:
@@ -236,10 +238,10 @@ class Message(Base):
     text: Mapped[str | None] = mapped_column(Text)
     media_type: Mapped[str | None] = mapped_column(String(16))  # photo|video|voice|sticker|file
     # Where to fetch the attachment for the master: {"url": ...} or {"file_id": ...}.
-    media: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    media: Mapped[dict[str, Any] | None] = mapped_column(NULLABLE_JSON)
     is_story_reply: Mapped[bool] = mapped_column(Boolean, default=False)
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)
-    tool_calls: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
+    tool_calls: Mapped[list[dict[str, Any]] | None] = mapped_column(NULLABLE_JSON)
     prompt_version: Mapped[str | None] = mapped_column(String(32))
     config_version: Mapped[int | None] = mapped_column(Integer)
     model: Mapped[str | None] = mapped_column(String(64))
@@ -369,11 +371,11 @@ class Draft(Base):
     conversation_id: Mapped[int] = mapped_column(ForeignKey("conversation.id", ondelete="CASCADE"))
     text: Mapped[str] = mapped_column(Text)
     # Side effect staged until approval, e.g. {"tool": "create_booking", "args": {...}}.
-    proposed_action: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    proposed_action: Mapped[dict[str, Any] | None] = mapped_column(NULLABLE_JSON)
     disclose: Mapped[bool] = mapped_column(Boolean, default=False)
     status: Mapped[str] = mapped_column(String(16), default="pending")
     owner_messages: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
-    result: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    result: Mapped[dict[str, Any] | None] = mapped_column(NULLABLE_JSON)
     created_at: Mapped[datetime] = mapped_column(TZ)
     decided_at: Mapped[datetime | None] = mapped_column(TZ)
     decided_by: Mapped[int | None] = mapped_column(BigInteger)
