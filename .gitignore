@@ -16,6 +16,7 @@ studios/private/
 
 # Eval reports and backups
 tests/evals/reports/
+tests/evals/cases/private/
 backups/
 
 # OS / editors

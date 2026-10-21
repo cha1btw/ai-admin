@@ -1,8 +1,12 @@
-"""Command line for founders: studio configs and a terminal chat with a studio bot.
+"""Command line for founders: studio configs, Owner Bot links, reports, setup, terminal chat.
 
 uv run python -m app.cli tenant validate studios/private/x.json
 uv run python -m app.cli tenant load studios/private/x.json [--demo]
 uv run python -m app.cli tenant preview demo_studio
+uv run python -m app.cli tenant link demo_studio [--role admin]
+uv run python -m app.cli tenant stats demo_studio --days 14
+uv run python -m app.cli telegram set-webhooks
+uv run python -m app.cli instagram link demo_studio
 uv run python -m app.cli chat demo_studio
 """
 
@@ -78,6 +82,61 @@ async def cmd_preview(slug: str) -> int:
         cfg = studio_config(tenant)
     today = SystemClock().now().astimezone(ZoneInfo(cfg.timezone)).date()
     print(json.dumps(public_studio_data(cfg, today), ensure_ascii=False, indent=2))
+    return 0
+
+
+def _context():
+    """AppContext for founders' commands (no model needed)."""
+    from app.llm.fake import FakeLLM
+
+    settings, factory = _factory()
+    clock = SystemClock()
+    return AppContext(
+        settings=settings,
+        session_factory=factory,
+        llm=FakeLLM(),
+        clock=clock,
+        channels={},
+        calendars=default_calendars(),
+        notifier=RecordingNotifier(),
+        alerts=Alerts(None, None, clock),
+    )
+
+
+async def cmd_link(slug: str, role: str) -> int:
+    """One-time Owner Bot link for a master or studio admin (valid 3 days)."""
+    from aiogram import Bot
+
+    from app.owner.actions import create_link
+
+    app = _context()
+    token = await create_link(app, slug, role)
+    if token is None:
+        print(f"Студії {slug} немає в базі.", file=sys.stderr)
+        return 1
+    if app.settings.owner_bot_token is None:
+        print(f"Токен: {token}\n(задайте OWNER_BOT_TOKEN, щоб отримати готове посилання)")
+        return 0
+    bot = Bot(token=app.settings.owner_bot_token.get_secret_value())
+    try:
+        me = await bot.me()
+    finally:
+        await bot.session.close()
+    print(f"https://t.me/{me.username}?start={token}")
+    return 0
+
+
+async def cmd_stats(slug: str, days: int) -> int:
+    """Pilot report: the same numbers the master sees in /stats."""
+    from app.owner.actions import stats_text
+
+    app = _context()
+    async with app.session_factory() as session:
+        tenant = await session.scalar(select(Tenant).where(Tenant.slug == slug))
+    if tenant is None:
+        print(f"Студії {slug} немає в базі.", file=sys.stderr)
+        return 1
+    print(await stats_text(app, tenant, days))
     return 0
 
 
@@ -194,6 +253,12 @@ def main() -> None:
     ld.add_argument("--demo", action="store_true", help="public demo studio (daily cleanup)")
     pv = tenant_sub.add_parser("preview")
     pv.add_argument("slug")
+    lk = tenant_sub.add_parser("link", help="one-time Owner Bot link for a master")
+    lk.add_argument("slug")
+    lk.add_argument("--role", choices=["owner", "admin"], default="owner")
+    st = tenant_sub.add_parser("stats", help="pilot report")
+    st.add_argument("slug")
+    st.add_argument("--days", type=int, default=14)
     chat = sub.add_parser("chat", help="talk to a studio bot in the terminal")
     chat.add_argument("slug")
     telegram = sub.add_parser("telegram", help="Telegram setup")
@@ -214,6 +279,10 @@ def main() -> None:
         code = asyncio.run(cmd_validate(args.path))
     elif args.action == "load":
         code = asyncio.run(cmd_load(args.path, args.demo))
+    elif args.action == "link":
+        code = asyncio.run(cmd_link(args.slug, args.role))
+    elif args.action == "stats":
+        code = asyncio.run(cmd_stats(args.slug, args.days))
     else:
         code = asyncio.run(cmd_preview(args.slug))
     sys.exit(code)

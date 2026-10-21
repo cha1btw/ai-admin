@@ -368,3 +368,24 @@ async def test_sandbox_never_notifies(app, llm) -> None:
 def test_demo_config_has_landing_faq() -> None:
     cfg = demo_config()
     assert any("короткі нігті" in f.q for f in cfg.faq)  # landing scene 1 answer exists in data
+
+
+async def test_daily_token_budget_stops_model_calls(app, llm, clock) -> None:
+    """R13: when the studio's daily token budget is spent, clients get the safe template."""
+    studio = await make_studio(app)
+    cid = await client_says(app, studio, "Привіт")
+    async with app.session_factory() as session, session.begin():
+        session.add(
+            Message(
+                tenant_id=studio.tenant_id,
+                conversation_id=cid,
+                role="system",
+                tokens_in=400_000,
+                tokens_out=1,
+                created_at=clock.now(),
+            )
+        )
+    await process_conversation(app, cid)
+    assert llm.calls == []
+    assert sent(app)[0].endswith("Дякуємо за повідомлення! Вам відповідять тут завтра після 09:00.")
+    assert any("бюджет" in text for text in app.alerts.sent)

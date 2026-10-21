@@ -15,6 +15,7 @@ import json
 import os
 import sys
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -59,7 +60,11 @@ JUDGE_PROMPT = (
 
 
 def build_config(case: dict[str, Any]) -> StudioConfig:
-    data = demo_config_dict()
+    """Demo studio by default; `config_file` points to a real studio (studios/private/...)."""
+    if case.get("config_file"):
+        data = json.loads((ROOT / case["config_file"]).read_text(encoding="utf-8"))
+    else:
+        data = demo_config_dict()
     for key, value in (case.get("config") or {}).items():
         if isinstance(value, dict) and isinstance(data.get(key), dict):
             data[key] = {**data[key], **value}
@@ -259,9 +264,10 @@ async def run_case(engine, factory, llm: LLMProvider, case: dict[str, Any]) -> l
     return reports
 
 
-def load_cases(only: str | None) -> list[dict[str, Any]]:
+def load_cases(only: str | None, directory: Path = CASES_DIR) -> list[dict[str, Any]]:
+    """All *.yaml under the directory, including cases/private/ (gitignored, real studios)."""
     cases = []
-    for path in sorted(CASES_DIR.glob("*.yaml")):
+    for path in sorted(directory.rglob("*.yaml")):
         for case in yaml.safe_load(path.read_text(encoding="utf-8")) or []:
             if only is None or case["id"] == only:
                 cases.append(case)
@@ -281,7 +287,7 @@ async def amain(args: argparse.Namespace) -> int:
     await asyncio.to_thread(command.upgrade, cfg, "head")
     engine = make_engine(TEST_DATABASE_URL, null_pool=True)
     factory = make_session_factory(engine)
-    cases = load_cases(args.case)
+    cases = load_cases(args.case, Path(args.dir) if args.dir else CASES_DIR)
     if not cases:
         print("no cases found", file=sys.stderr)
         return 2
@@ -318,6 +324,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(prog="python -m tests.evals.runner")
     parser.add_argument("--case", help="run one case by id")
     parser.add_argument("--runs", type=int, default=0, help="runs per case (default: 3 for hard)")
+    parser.add_argument("--dir", help="cases directory, e.g. tests/evals/cases/private")
     sys.exit(asyncio.run(amain(parser.parse_args())))
 
 

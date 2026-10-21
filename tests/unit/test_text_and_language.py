@@ -85,3 +85,17 @@ def test_empty_env_values_mean_unset(tmp_path, monkeypatch) -> None:
     settings = Settings()
     assert settings.llm_temperature is None and settings.alert_chat_id is None
     assert settings.admin_telegram_ids == [1, 2]
+
+
+async def test_runtime_without_model_key_still_builds() -> None:
+    from app.config import Settings
+    from app.llm.base import LLMError
+    from app.runtime import Bots, build_context
+
+    settings = Settings(_env_file=None, llm_provider="openai", llm_model="", openai_api_key=None)
+    app = build_context(settings, session_factory=None, bots=Bots())
+    assert app.llm.model_name == "unavailable"
+    import pytest
+
+    with pytest.raises(LLMError):
+        await app.llm.complete([], [])

@@ -10,11 +10,14 @@ from app.config import Settings
 from app.context import AppContext
 from app.core.alerts import Alerts
 from app.core.clock import Clock, SystemClock
+from app.core.logging import get_logger
 from app.db.session import SessionFactory
 from app.llm.base import LLMProvider
-from app.llm.factory import build_llm
+from app.llm.factory import LLMConfigError, UnavailableLLM, build_llm
 from app.owner.notifier import OwnerNotifier, RecordingNotifier
 from app.scheduling.registry import default_calendars
+
+log = get_logger(__name__)
 
 OWNER_UPDATES = [
     "message",
@@ -88,10 +91,16 @@ def build_context(
 
         calendars["google"] = GoogleCalendar.from_file(settings.google_service_account_file)
     alerts = Alerts(notifier if bots.owner else None, settings.alert_chat_id, clock)
+    if llm is None:
+        try:
+            llm = build_llm(settings)
+        except LLMConfigError as exc:
+            log.error("llm.not_configured", reason=str(exc))
+            llm = UnavailableLLM(str(exc))
     return AppContext(
         settings=settings,
         session_factory=session_factory,
-        llm=llm or build_llm(settings),
+        llm=llm,
         clock=clock,
         channels=channels,
         calendars=calendars,

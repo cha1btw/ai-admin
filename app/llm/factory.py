@@ -1,9 +1,22 @@
 from app.config import Settings
-from app.llm.base import LLMProvider
+from app.llm.base import ChatMessage, LLMError, LLMProvider, LLMResponse, ToolSpec
 
 
 class LLMConfigError(Exception):
     pass
+
+
+class UnavailableLLM:
+    """Used when the model is not configured: every call fails, so clients get the safe
+    template and a handoff, while Owner Bot and everything else keep working."""
+
+    model_name = "unavailable"
+
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
+
+    async def complete(self, messages: list[ChatMessage], tools: list[ToolSpec]) -> LLMResponse:
+        raise LLMError(self.reason)
 
 
 def build_llm(settings: Settings) -> LLMProvider:
