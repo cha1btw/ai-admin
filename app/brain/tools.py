@@ -30,7 +30,7 @@ from app.brain.templates import render
 from app.db.models import Client, Conversation, Service, Tenant
 from app.llm.base import ToolCall, ToolSpec
 from app.scheduling.availability import free_slots, offer_slots, staff_for_service
-from app.scheduling.base import CalendarProvider
+from app.scheduling.base import CalendarError, CalendarProvider
 from app.scheduling.slots import horizon_date
 from app.tenants.schema import StudioConfig
 
@@ -486,6 +486,10 @@ async def execute_tool(tc: TurnContext, call: ToolCall) -> ToolOutcome:
         return await handler(tc, call.arguments)
     except ArgumentError as exc:
         return ToolOutcome({"error": "invalid_arguments", "detail": str(exc)})
+    except CalendarError:
+        return ToolOutcome(
+            {"error": "calendar_unavailable", "hint": _ERROR_HINTS["calendar_unavailable"]}
+        )
     except BookingError as exc:
         result: dict[str, Any] = {"error": exc.code}
         if exc.code == "late_cancellation":

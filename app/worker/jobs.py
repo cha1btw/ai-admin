@@ -20,6 +20,7 @@ from app.db.models import (
     Draft,
     JobRun,
     Message,
+    Staff,
     Tenant,
 )
 from app.owner.notifications import (
@@ -30,6 +31,7 @@ from app.owner.notifications import (
 )
 from app.owner.notifier import Button
 from app.privacy.retention import apply_retention
+from app.scheduling.base import CalendarError
 from app.tenants.loader import studio_config
 
 log = get_logger(__name__)
@@ -71,6 +73,7 @@ class Scheduler:
     async def hourly(self) -> None:
         await apply_retention(self.app)
         await demo_cleanup(self.app)
+        await reconcile_google_bookings(self.app)
         if "instagram" in self.app.channels:
             from app.channels.instagram import refresh_tokens
 
@@ -290,3 +293,47 @@ async def demo_cleanup(app: AppContext) -> None:
                 Client.tenant_id.in_(demo_ids), Client.last_seen_at < now - timedelta(days=7)
             )
         )
+
+
+async def reconcile_google_bookings(app: AppContext) -> None:
+    """The master deleted our event in Google Calendar: the slot is free again, so the booking is
+    marked cancelled by the studio and the master is told (the bot does not write to the client)."""
+    provider = app.calendars.get("google")
+    if provider is None:
+        return
+    now = app.clock.now()
+    async with app.session_factory() as session, session.begin():
+        rows = list(
+            await session.scalars(
+                select(Booking).where(
+                    Booking.status.in_(("confirmed", "pending_prepayment")),
+                    Booking.external_event_id.is_not(None),
+                    Booking.is_sandbox.is_(False),
+                    Booking.start_at > now,
+                    Booking.start_at < now + timedelta(days=14),
+                )
+            )
+        )
+        for booking in rows:
+            tenant = await session.get(Tenant, booking.tenant_id)
+            cfg = studio_config(tenant)
+            if cfg.calendar_provider != "google" or booking.staff_id is None:
+                continue
+            staff = await session.get(Staff, booking.staff_id)
+            try:
+                exists = await provider.event_exists(cfg, staff, booking.external_event_id)
+            except CalendarError:
+                log.warning("reconcile.check_failed", booking_id=booking.id)
+                continue
+            if exists:
+                continue
+            booking.status = "cancelled_by_studio"
+            booking.cancel_reason = "deleted_in_calendar"
+            local = booking.start_at.astimezone(ZoneInfo(cfg.timezone))
+            text = (
+                f"🗑 Подію {booking.client_name or 'клієнтки'} · {day_label(local.date(), 'uk')} о "
+                f"{hhmm(local)} видалено з Google Календаря. Запис позначено скасованим. "
+                "Бот клієнтці не писав: повідомте її, якщо потрібно "
+                f"({booking.client_phone or '—'})."
+            )
+            await notify_members(app, session, tenant, cfg, text)
