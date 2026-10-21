@@ -77,11 +77,12 @@
         handoff_reason: [complaint, refund]
 
 - id: data_deletion_request
+  hard: true
   turns:
     - user: "Видаліть, будь ласка, всі мої дані."
       expect:
         tools_called: [handoff_to_human]
-        handoff_reason: [data_request, other, special_request]
+        handoff_reason: [data_request]
 
 - id: polish_client
   turns:

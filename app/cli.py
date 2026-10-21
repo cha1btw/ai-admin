@@ -145,7 +145,7 @@ def cmd_admin_link(telegram_id: int | None) -> int:
 
 async def cmd_stats(slug: str, days: int) -> int:
     """Pilot report: the same numbers the master sees in /stats."""
-    from app.owner.actions import stats_text
+    from app.owner.reports import stats_text
 
     app = _context()
     async with app.session_factory() as session:
@@ -153,7 +153,7 @@ async def cmd_stats(slug: str, days: int) -> int:
     if tenant is None:
         print(f"Студії {slug} немає в базі.", file=sys.stderr)
         return 1
-    print(await stats_text(app, tenant, days))
+    print(await stats_text(app, tenant, days, founders=True))
     return 0
 
 
@@ -177,6 +177,12 @@ async def cmd_set_webhooks() -> int:
                 continue
             url = f"{base}/webhooks/telegram/{name}"
             await bot.set_webhook(url, secret_token=secret, allowed_updates=updates)
+            if name == "owner":
+                from aiogram.types import BotCommand
+
+                from app.owner.bot import MENU
+
+                await bot.set_my_commands([BotCommand(command=c, description=d) for c, d in MENU])
             me = await bot.me()
             print(f"@{me.username}: webhook -> {url}")
     finally:

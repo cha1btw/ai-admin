@@ -23,7 +23,8 @@ from app.context import AppContext
 from app.core.logging import get_logger
 from app.db.models import Tenant
 from app.llm.factory import LLMConfigError, build_llm
-from app.owner.actions import health_text, stats_text
+from app.owner.actions import health_text
+from app.owner.reports import stats_text
 from app.tenants.public import public_studio_data
 
 log = get_logger(__name__)
@@ -191,7 +192,7 @@ async def stats(request: Request, slug: str, days: int = 30) -> dict[str, str]:
         tenant = await session.scalar(select(Tenant).where(Tenant.slug == slug))
     if tenant is None:
         raise _not_found()
-    return {"text": await stats_text(ctx, tenant, max(1, min(days, 365)))}
+    return {"text": await stats_text(ctx, tenant, max(1, min(days, 365)), founders=True)}
 
 
 @api.get("/health")

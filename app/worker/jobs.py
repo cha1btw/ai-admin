@@ -1,7 +1,7 @@
 """Periodic jobs. Each is idempotent, so running one twice does no harm."""
 
 from collections.abc import Awaitable, Callable
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import delete, func, select
@@ -30,11 +30,16 @@ from app.owner.notifications import (
     notify_members,
 )
 from app.owner.notifier import Button
+from app.owner.reports import collect_stats, founders_digest_text, weekly_report_text
 from app.privacy.retention import apply_retention
 from app.scheduling.base import CalendarError
 from app.tenants.loader import studio_config
 
 log = get_logger(__name__)
+
+FOUNDERS_TZ = ZoneInfo("Europe/Kyiv")
+FOUNDERS_DIGEST_HOUR = 9
+WEEKLY_REPORT_FALLBACK = time(10, 0)  # masters who do not work on Mondays
 
 
 class Scheduler:
@@ -69,6 +74,8 @@ class Scheduler:
         await expire_drafts(app)
         await prepayment_reminders(app)
         await morning_digests(app)
+        await weekly_reports(app)
+        await founders_digest(app)
 
     async def hourly(self) -> None:
         await apply_retention(self.app)
@@ -213,6 +220,57 @@ async def morning_digests(app: AppContext) -> None:
             text = await _digest_text(session, tenant, cfg, now)
             if text:
                 await notify_members(app, session, tenant, cfg, text)
+
+
+async def _claim(session, name: str, scope: str, run_key: str) -> bool:
+    claimed = await session.execute(
+        insert(JobRun)
+        .values(name=name, scope=scope, run_key=run_key)
+        .on_conflict_do_nothing(index_elements=["name", "scope", "run_key"])
+    )
+    return bool(claimed.rowcount)
+
+
+async def weekly_reports(app: AppContext) -> None:
+    """Monday, when the master's hours start: what the bot did for them last week."""
+    now = app.clock.now()
+    async with app.session_factory() as session, session.begin():
+        tenants = list(
+            await session.scalars(
+                select(Tenant).where(Tenant.is_demo.is_(False), Tenant.status == "active")
+            )
+        )
+        for tenant in tenants:
+            cfg = studio_config(tenant)
+            local = now.astimezone(ZoneInfo(cfg.timezone))
+            ranges = owner_ranges(cfg, local.date())
+            start = ranges[0].start if ranges else WEEKLY_REPORT_FALLBACK
+            if local.weekday() != 0 or local.time() < start:
+                continue
+            year, week, _ = local.isocalendar()
+            if not await _claim(session, "weekly", str(tenant.id), f"{year}-W{week:02d}"):
+                continue
+            stats = await collect_stats(session, tenant, cfg, now - timedelta(days=7))
+            text = weekly_report_text(tenant, cfg, stats)
+            if text:
+                await notify_members(app, session, tenant, cfg, text)
+
+
+async def founders_digest(app: AppContext) -> None:
+    """Every morning at FOUNDERS_DIGEST_HOUR (Kyiv): all studios in one silent message."""
+    if not app.settings.admin_telegram_ids:
+        return
+    now = app.clock.now()
+    local = now.astimezone(FOUNDERS_TZ)
+    if local.hour < FOUNDERS_DIGEST_HOUR:
+        return
+    async with app.session_factory() as session, session.begin():
+        if not await _claim(session, "founders_digest", "", local.date().isoformat()):
+            return
+    text = await founders_digest_text(app, now)
+    if text:
+        for chat_id in app.settings.admin_telegram_ids:
+            await app.notifier.send(chat_id, text, silent=True)
 
 
 async def _digest_text(session, tenant: Tenant, cfg, now: datetime) -> str | None:

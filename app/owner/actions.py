@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import delete, func, literal_column, select
+from sqlalchemy import delete, func, select
 
 from app.brain import booking as bookings
 from app.brain.booking import BookingContext, BookingError
@@ -24,14 +24,12 @@ from app.brain.events import (
 )
 from app.brain.guardrails import disclosure_needed
 from app.brain.handoff import (
-    REASON_LABELS,
     eta_text,
-    in_owner_hours,
     return_to_bot,
     start_handoff,
     take_over,
 )
-from app.brain.i18n import WEEKDAYS, day_label, hhmm, money, price_text
+from app.brain.i18n import WEEKDAYS, day_label, hhmm, price_text
 from app.brain.ingest import Inbound, record_client_message, supersede_drafts
 from app.brain.language import choose_language
 from app.brain.orchestrator import Outgoing
@@ -68,6 +66,7 @@ from app.db.models import (
 from app.owner.notifications import deliver, dispatch_events
 from app.owner.notifier import Button, Keyboard
 from app.owner.parsing import parse_day_range, parse_local_datetime
+from app.owner.reports import stats_text
 from app.scheduling.registry import provider_for
 from app.tenants.loader import studio_config
 from app.tenants.schema import WEEKDAY_KEYS, StudioConfig
@@ -99,6 +98,7 @@ HELP = (
     "/pause — зупинити бота, /resume — увімкнути\n"
     "/stats — статистика за 7 днів (/stats 30 — за 30)\n"
     "/data — що знає бот про студію\n"
+    "/change — повідомити нам про нові ціни, послуги чи графік\n"
     "/sandbox — спробувати бота як клієнтка, /stop — вийти\n"
     "/today — записи на сьогодні\n"
     "/close 25.10 або /close 25.10-27.10 відпустка — закрити дні, /open 25.10 — відкрити\n"
@@ -909,117 +909,6 @@ async def show_data(app: AppContext, telegram_id: int) -> Result:
         return Result(data_text(studio_config(tenant)))
 
 
-async def stats_text(app: AppContext, tenant: Tenant, days: int) -> str:
-    cfg = studio_config(tenant)
-    now = app.clock.now()
-    since = now - timedelta(days=days)
-    async with app.session_factory() as session:
-        real = select(Conversation.id).where(
-            Conversation.tenant_id == tenant.id, Conversation.is_sandbox.is_(False)
-        )
-        conversations = await session.scalar(
-            select(func.count(func.distinct(Message.conversation_id))).where(
-                Message.role == "client",
-                Message.created_at >= since,
-                Message.conversation_id.in_(real),
-            )
-        )
-        rows = (
-            await session.execute(
-                select(func.count(), func.coalesce(func.sum(Booking.price_min), 0)).where(
-                    Booking.tenant_id == tenant.id,
-                    Booking.created_by == "bot",
-                    Booking.is_sandbox.is_(False),
-                    Booking.created_at >= since,
-                    Booking.status.in_(("confirmed", "pending_prepayment")),
-                )
-            )
-        ).one()
-        client_times = list(
-            await session.scalars(
-                select(Message.created_at).where(
-                    Message.role == "client",
-                    Message.created_at >= since,
-                    Message.conversation_id.in_(real),
-                )
-            )
-        )
-        reason = literal_column("audit_log.details->>'reason'")
-        handoffs = (
-            await session.execute(
-                select(reason, func.count())
-                .select_from(AuditLog)
-                .where(
-                    AuditLog.tenant_id == tenant.id,
-                    AuditLog.action == "handoff",
-                    AuditLog.created_at >= since,
-                )
-                .group_by(reason)
-            )
-        ).all()
-        downs = await session.scalar(
-            select(func.count())
-            .select_from(Feedback)
-            .where(Feedback.tenant_id == tenant.id, Feedback.created_at >= since)
-        )
-        failed = await session.scalar(
-            select(func.count())
-            .select_from(Message)
-            .where(
-                Message.tenant_id == tenant.id,
-                Message.delivery_status == "failed",
-                Message.created_at >= since,
-            )
-        )
-        tokens = await session.scalar(
-            select(func.coalesce(func.sum(Message.tokens_in + Message.tokens_out), 0)).where(
-                Message.tenant_id == tenant.id, Message.created_at >= since
-            )
-        )
-        first_reply = await _median_first_reply(session, tenant.id, since)
-    off = sum(1 for t in client_times if not in_owner_hours(cfg, t))
-    share = f"{round(100 * off / len(client_times))}%" if client_times else "—"
-    handoff_text = ", ".join(f"{REASON_LABELS.get(r, r)}: {n}" for r, n in handoffs) or "немає"
-    count, amount = rows
-    return (
-        f"Статистика за {days} дн. ({tenant.name}):\n"
-        f"Діалоги: {conversations}\n"
-        f"Записи від бота: {count} на суму {money(int(amount), cfg.currency, 'uk')}\n"
-        f"Повідомлення поза вашими годинами: {share}\n"
-        f"Медіана першої відповіді: {first_reply}\n"
-        f"Передано вам: {handoff_text}\n"
-        f"👎 на відповіді бота: {downs}\nНе доставлено: {failed}\n"
-        f"Токени моделі: {tokens}"
-    )
-
-
-async def _median_first_reply(session, tenant_id: int, since: datetime) -> str:
-    """Median time from a client's first message in a quiet conversation to the bot's answer."""
-    rows = (
-        await session.execute(
-            select(Message.conversation_id, Message.role, Message.created_at)
-            .where(
-                Message.tenant_id == tenant_id,
-                Message.created_at >= since,
-                Message.role.in_(("client", "bot")),
-            )
-            .order_by(Message.conversation_id, Message.id)
-        )
-    ).all()
-    waits: list[float] = []
-    pending: dict[int, datetime] = {}
-    for conversation_id, role, created in rows:
-        if role == "client":
-            pending.setdefault(conversation_id, created)
-        elif conversation_id in pending:
-            waits.append((created - pending.pop(conversation_id)).total_seconds())
-    if not waits:
-        return "—"
-    waits.sort()
-    median = waits[len(waits) // 2]
-    return f"{int(median)} с" if median < 120 else f"{int(median // 60)} хв"
-
-
 async def show_stats(app: AppContext, telegram_id: int, days: int) -> Result:
     async with app.session_factory() as session, session.begin():
         tenant = await current_tenant(session, app, telegram_id)
@@ -1195,12 +1084,53 @@ async def handle_text(app: AppContext, telegram_id: int, text: str) -> Result | 
         return await finish_confirm_request(app, telegram_id, awaiting["booking_id"], text)
     if kind == "feedback":
         return await finish_feedback(app, telegram_id, awaiting["feedback_id"], text)
+    if kind == "change":
+        return await finish_change(app, telegram_id, text)
     if state.get("sandbox_tenant"):
         await sandbox_message(
             app, telegram_id, state["sandbox_tenant"], Inbound(str(telegram_id), None, text)
         )
         return None
     return Result("Не зрозумів. " + HELP)
+
+
+async def start_change(app: AppContext, telegram_id: int, text: str | None) -> Result:
+    """/change: the master tells us what changed; founders update the data in the admin panel."""
+    if text:
+        return await finish_change(app, telegram_id, text)
+    async with app.session_factory() as session, session.begin():
+        if await current_tenant(session, app, telegram_id) is None:
+            return Result(NOT_LINKED)
+        account = await ensure_owner(session, telegram_id, None)
+        set_state(account, awaiting={"kind": "change"})
+    return Result(
+        "Напишіть одним повідомленням, що змінилося: ціни, послуги, графік, адреса, правила. "
+        "Ми оновимо дані бота й напишемо вам. /cancel — скасувати."
+    )
+
+
+async def finish_change(app: AppContext, telegram_id: int, text: str) -> Result:
+    async with app.session_factory() as session, session.begin():
+        account = await ensure_owner(session, telegram_id, None)
+        set_state(account, awaiting=None)
+        tenant = await current_tenant(session, app, telegram_id)
+        if tenant is None:
+            return Result(NOT_LINKED)
+        _audit(app, session, tenant.id, telegram_id, "data.change_requested")
+        name = tenant.name
+    for chat_id in app.settings.admin_telegram_ids:
+        await app.notifier.send(
+            chat_id,
+            f"✏️ Зміни від студії «{name}» (Telegram id {telegram_id}):\n\n{text[:3500]}\n\n"
+            "Адмінка → студія → AI-оновлення: вставте цей текст і збережіть.",
+        )
+    if not app.settings.admin_telegram_ids:
+        await app.alerts.send(
+            "change_no_admins", "Майстер надіслав /change, а ADMIN_TELEGRAM_IDS порожній."
+        )
+    return Result(
+        "Дякуємо, передали команді. Після оновлення перевірте /data: там видно, що знає бот."
+    )
 
 
 async def cancel_pending(app: AppContext, telegram_id: int) -> Result:

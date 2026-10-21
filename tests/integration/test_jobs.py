@@ -181,3 +181,86 @@ async def test_forget_client(app, llm, clock) -> None:
         assert await session.scalar(select(func.count()).select_from(Message)) == 0
         assert await session.scalar(select(func.count()).select_from(Conversation)) == 0
     assert not await forget_client(app, client_id, actor="admin:1")
+
+
+async def _bot_booking_tuesday_night(app, llm):
+    """The clock fixture starts on Tuesday 2026-10-20 23:47, outside the master's hours."""
+    studio = await make_studio(app)
+    llm.add(
+        call(
+            "get_free_slots",
+            service_id="gel_manicure",
+            date_from="2026-10-21",
+            date_to="2026-10-21",
+        ),
+        reply_with_slots("Є {0}."),
+        book_slot_at("10:00", "Анна"),
+    )
+    cid = await client_says(app, studio, "Можна завтра?")
+    await process_conversation(app, cid)
+    cid = await client_says(app, studio, "10:00, Анна")
+    await process_conversation(app, cid)
+    return studio
+
+
+async def test_weekly_report_on_monday_once(app, llm, clock) -> None:
+    await _bot_booking_tuesday_night(app, llm)
+    clock.set(kyiv("2026-10-26 08:30"))  # Monday before the master's hours
+    await jobs.weekly_reports(app)
+    assert not any(n.text.startswith("📊") for n in app.notifier.sent)
+    clock.set(kyiv("2026-10-26 09:05"))
+    await jobs.weekly_reports(app)
+    await jobs.weekly_reports(app)
+    reports = [n for n in app.notifier.sent if n.text.startswith("📊")]
+    assert len(reports) == 1
+    assert "Записів від бота: 1 на суму 900 грн" in reports[0].text
+    assert "поки ви відпочивали: 1" in reports[0].text
+
+
+async def test_founders_digest_with_cost(app, llm, clock) -> None:
+    app.settings = app.settings.model_copy(
+        update={
+            "admin_telegram_ids": [777],
+            "llm_price_input_per_m": 1.0,
+            "llm_price_output_per_m": 4.0,
+        }
+    )
+    await _bot_booking_tuesday_night(app, llm)
+    clock.set(kyiv("2026-10-21 08:00"))
+    await jobs.founders_digest(app)
+    assert not [n for n in app.notifier.sent if n.chat_id == 777]
+    clock.set(kyiv("2026-10-21 09:00"))
+    await jobs.founders_digest(app)
+    await jobs.founders_digest(app)
+    digests = [n for n in app.notifier.sent if n.chat_id == 777]
+    assert len(digests) == 1 and digests[0].silent
+    assert "Demo Nail Studio (autopilot): діалогів 1, записів 1" in digests[0].text
+    assert "≈ $" in digests[0].text
+
+
+async def test_data_request_reaches_founders_with_forget_hint(app, llm, clock) -> None:
+    app.settings = app.settings.model_copy(update={"admin_telegram_ids": [777]})
+    studio = await make_studio(app)
+    llm.add(call("handoff_to_human", reason="data_request", summary="Просить видалити дані"))
+    cid = await client_says(app, studio, "Видаліть мої дані")
+    await process_conversation(app, cid)
+    async with app.session_factory() as session:
+        client_id = (await session.get(Conversation, cid)).client_id
+    founders = [n.text for n in app.notifier.sent if n.chat_id == 777]
+    assert founders and f"/forget {client_id}" in founders[0]
+    master = [n.text for n in app.notifier.sent if n.chat_id == OWNER_TG]
+    assert "видалимо дані" in master[0]
+
+
+async def test_change_request_goes_to_founders(app) -> None:
+    app.settings = app.settings.model_copy(update={"admin_telegram_ids": [777]})
+    await make_studio(app)
+    prompt = await actions.start_change(app, OWNER_TG, None)
+    assert "що змінилося" in prompt.text
+    done = await actions.handle_text(app, OWNER_TG, "Манікюр тепер 950 грн")
+    assert "передали команді" in done.text
+    sent = [n.text for n in app.notifier.sent if n.chat_id == 777]
+    assert "Манікюр тепер 950 грн" in sent[0] and "Demo Nail Studio" in sent[0]
+    # The next text is not swallowed by the finished /change.
+    again = await actions.handle_text(app, OWNER_TG, "привіт")
+    assert again.text.startswith("Не зрозумів")

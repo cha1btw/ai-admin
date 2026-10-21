@@ -272,6 +272,14 @@ async def _handoff(app, session, tenant, cfg, event: HandoffStarted) -> None:
         f"Останнє повідомлення: «{last}»",
         "Бот замовк і чекає на вас.",
     ]
+    if event.reason == "data_request":
+        lines.append("Ми теж отримали цей запит і видалимо дані після вашої відповіді клієнтці.")
+        for chat_id in app.settings.admin_telegram_ids:
+            await app.notifier.send(
+                chat_id,
+                f"🔐 Запит на видалення даних: студія «{tenant.name}», клієнтка #{client.id} "
+                f"({channel}). Коли майстер відповість: /forget {client.id}",
+            )
     buttons: Keyboard = [
         [Button("Відповісти", f"c:reply:{conversation.id}")],
         [

@@ -96,6 +96,11 @@ async def stats(message: Message, command: CommandObject, app: AppContext) -> No
     )
 
 
+async def change(message: Message, command: CommandObject, app: AppContext) -> None:
+    result = await actions.start_change(app, message.from_user.id, (command.args or "").strip())
+    await send_result(app, message.chat.id, result)
+
+
 async def data(message: Message, app: AppContext) -> None:
     await send_result(app, message.chat.id, await actions.show_data(app, message.from_user.id))
 
@@ -316,6 +321,22 @@ async def on_text(message: Message, app: AppContext) -> None:
     await send_result(app, message.chat.id, await actions.handle_text(app, user, message.text))
 
 
+# The "/" menu masters see in Owner Bot (set by `python -m app.cli telegram set-webhooks`).
+# Founders' commands stay out of it: they are in /help for founders only.
+MENU = [
+    ("today", "Записи на сьогодні"),
+    ("mode", "Режим роботи бота"),
+    ("pause", "Зупинити бота"),
+    ("resume", "Увімкнути бота"),
+    ("stats", "Статистика"),
+    ("data", "Що знає бот"),
+    ("change", "Повідомити про зміни цін чи графіка"),
+    ("close", "Закрити дні (відпустка)"),
+    ("sandbox", "Спробувати бота як клієнтка"),
+    ("help", "Усі команди"),
+]
+
+
 def build_owner_dispatcher() -> Dispatcher:
     """Fresh routers per dispatcher: aiogram routers can belong to one dispatcher only."""
     business_router = Router(name="business")
@@ -336,6 +357,7 @@ def build_owner_dispatcher() -> Dispatcher:
     commands.message.register(resume, Command("resume"))
     commands.message.register(stats, Command("stats"))
     commands.message.register(data, Command("data"))
+    commands.message.register(change, Command("change"))
     commands.message.register(sandbox, Command("sandbox"))
     commands.message.register(stop, Command("stop"))
     commands.message.register(today, Command("today"))
