@@ -17,6 +17,9 @@ migrate: db ## Apply database migrations
 run: migrate ## API with auto-reload on :8000
 	uv run uvicorn app.api.main:app --reload --port 8000
 
+admin: ## Login link to the admin panel (open it while `make run` is running)
+	uv run python -m app.cli admin link
+
 worker: migrate ## Worker: inbound queue, replies, periodic jobs
 	uv run python -m app.worker.main
 
@@ -58,4 +61,4 @@ webhooks: ## Production: point Telegram bots at PUBLIC_BASE_URL
 backup: ## Production: database backup (see deploy/backup.sh)
 	deploy/backup.sh
 
-.PHONY: help install db migrate run worker poll test lint fmt eval chat demo tenant-validate tenant-load tenant-preview webhooks backup
+.PHONY: help install db migrate run admin worker poll test lint fmt eval chat demo tenant-validate tenant-load tenant-preview webhooks backup

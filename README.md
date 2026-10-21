@@ -56,6 +56,16 @@ make worker              # processes them, replies, runs periodic jobs
 Become an admin of your local Owner Bot: put your Telegram id into `ADMIN_TELEGRAM_IDS`, then
 `/link demo_studio` in the bot or `uv run python -m app.cli tenant link demo_studio`.
 
+## Admin panel
+
+`/admin` on the API (founders only): studios dashboard, a form editor for every config section
+with validation and a diff before saving, versions with rollback, AI import of a studio from raw
+notes, a test chat on the saved config with the tools the bot called, an automatic check of ten
+typical and tricky questions, launch checklist, Owner Bot and Instagram links, landing leads.
+
+Log in with `/admin` in Owner Bot or `uv run python -m app.cli admin link` (one-time link,
+10 minutes). Locally: `make run` in one terminal, `make admin` in another, open the link.
+
 ## Evals (real model)
 
 ```bash
@@ -76,23 +86,26 @@ the report before changing the prompt or `LLM_MODEL`.
 | `uv run python -m app.cli tenant link <slug> [--role admin]` | one-time Owner Bot link for a master |
 | `uv run python -m app.cli tenant stats <slug> --days 14` | pilot report |
 | `uv run python -m app.cli instagram link <slug>` | Instagram Business Login link for a studio |
+| `uv run python -m app.cli admin link [--id TELEGRAM_ID]` | one-time login link to the admin panel |
 | `make webhooks` | point Telegram bots at `PUBLIC_BASE_URL` (production) |
 | `make backup` | database backup (production) |
 
 ## Owner Bot (for masters)
 
-`/data` · `/sandbox` · `/mode` · `/pause` · `/resume` · `/stats [days]` · `/today` ·
+`/data` · `/change` · `/sandbox` · `/mode` · `/pause` · `/resume` · `/stats [days]` · `/today` ·
 `/close 25.10-27.10 reason` · `/open 25.10` · `/switch` · `/cancel`. Buttons on notifications:
 send/edit/reject a draft, reply to the client, take over, return the bot, cancel a booking,
 confirm a prepayment or a request, 👎 on a bot answer. Founders (`ADMIN_TELEGRAM_IDS`):
-`/tenants`, `/link`, `/health`, `/pause_all`, `/resume_all`, `/forget`.
+`/admin`, `/tenants`, `/link`, `/health`, `/pause_all`, `/resume_all`, `/forget`. Masters get a
+report every Monday; founders get a digest of all studios every morning at 09:00 Kyiv.
 
 ## Deployment
 
 One VPS in the EU with `deploy/docker-compose.prod.yml` (Postgres, migrations, API, worker,
 Caddy with automatic HTTPS). Step by step: [docs/runbook.md](docs/runbook.md). The landing page
-is static (`landing/`, deploy to Vercel with the project root set to `landing`); replace
-`YOUR_DEMO_BOT` and `YOUR_CONTACT` first.
+is static (`landing/`, deploy to Vercel with the project root set to `landing`). Edit the
+`CONFIG` block at the top of `landing/index.html` first: `apiBase` (the API address for the lead
+form), `demoBot`, `contact` and `prices`; set `LANDING_ORIGIN` on the API to the landing's origin.
 
 ## Pilot checklist
 
