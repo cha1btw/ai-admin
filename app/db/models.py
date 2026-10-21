@@ -188,6 +188,7 @@ class Client(Base):
     name: Mapped[str | None] = mapped_column(String(100))
     phone: Mapped[str | None] = mapped_column(String(32))
     language: Mapped[str | None] = mapped_column(String(8))
+    privacy_notified_at: Mapped[datetime | None] = mapped_column(TZ)
     created_at: Mapped[datetime] = _created()
     last_seen_at: Mapped[datetime | None] = mapped_column(TZ)
 
@@ -234,6 +235,8 @@ class Message(Base):
     external_id: Mapped[str | None] = mapped_column(String(128))
     text: Mapped[str | None] = mapped_column(Text)
     media_type: Mapped[str | None] = mapped_column(String(16))  # photo|video|voice|sticker|file
+    # Where to fetch the attachment for the master: {"url": ...} or {"file_id": ...}.
+    media: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     is_story_reply: Mapped[bool] = mapped_column(Boolean, default=False)
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)
     tool_calls: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)

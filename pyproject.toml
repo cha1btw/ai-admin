@@ -34,6 +34,10 @@ extend-exclude = ["migrations/versions"]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "ASYNC", "RUF"]
 ignore = ["RUF001", "RUF002", "RUF003"]  # Cyrillic text in bot copy is intentional
 
+[tool.ruff.lint.per-file-ignores]
+# The bot prompt is prose; wrapping it would change what the model reads.
+"app/brain/prompts.py" = ["E501"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
