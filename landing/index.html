@@ -1,5 +1,15 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>AI-адміністратор директу</title>
-<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Бот відповідає клієнткам у директі за вашим прайсом, записує у вільні вікна й кличе вас, коли потрібна людина.">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="uk_UA">
+<meta property="og:title" content="AI-адміністратор директу">
+<meta property="og:description" content="Бот відповідає клієнткам у директі за вашим прайсом, записує у вільні вікна й кличе вас, коли потрібна людина.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23c8245f'/%3E%3Cpath d='M22 18.2A7.5 7.5 0 1 1 13.8 10a5.8 5.8 0 0 0 8.2 8.2z' fill='white'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Onest:wght@400;500;600&family=Unbounded:wght@500;700&display=swap">
 <style>
 /* Layout: hero line, then a night-blue stage. Left: the studio's Instagram DM. Right: what the master sees (Telegram + tomorrow's calendar). Below: how it works and how to start safely. */
@@ -198,8 +208,23 @@ p { margin: 0; }
   * { animation: none !important; transition: none !important; }
   .progress { display: none; }
 }
-</style>
 
+/* contact block (landing only) */
+.contact { display: flex; flex-direction: column; gap: 14px; max-width: 62ch; }
+.cta {
+  align-self: flex-start;
+  font: 600 16px/1 var(--font-body);
+  padding: 14px 20px;
+  border-radius: 999px;
+  background-color: var(--accent);
+  background-image: linear-gradient(180deg, rgb(255 255 255 / 0.3), transparent 55%);
+  color: var(--accent-ink);
+  text-decoration: none;
+}
+.contact a:not(.cta) { color: var(--accent); }
+</style>
+</head>
+<body>
 <div class="wrap">
   <header class="hero">
     <p class="kicker">AI-адміністратор для директу</p>
@@ -270,6 +295,13 @@ p { margin: 0; }
     <strong>Перші 2 тижні безкоштовно. Перевіримо на ваших справжніх діалогах.</strong>
     <p class="fine">Демонстрація: назва студії, ціни, вільні вікна, імена й час відповіді вигадані. У вашій студії бот працює за вашим прайсом і вашим календарем.</p>
   </section>
+
+  <section class="contact" id="try">
+    <h2>Спробуйте самі</h2>
+    <p class="sub">Напишіть демо-боту в Telegram: ціни, вільні вікна, запис. Дані вигадані, записи пробні.</p>
+    <a class="cta" href="https://t.me/YOUR_DEMO_BOT">Відкрити демо-бота</a>
+    <p class="fine">Підключити свою студію: <a href="https://t.me/YOUR_CONTACT">@YOUR_CONTACT</a></p>
+  </section>
 </div>
 
 <script>
@@ -333,14 +365,14 @@ p { margin: 0; }
       first: "Добрий вечір! Скільки коштує манікюр з гель-лаком? Є вікно завтра після 15:00?",
       steps: [
         [900,  function () { setPill("Бот читає прайс і календар"); typing(); }],
-        [1500, function () { setClock("23:47:04"); setPill("Відповідь за 4 секунди"); say("b", "Добрий вечір! Я AI-асистент студії. Манікюр з гель-лаком коштує 900 грн, приблизно дві години. Завтра після 15:00 вільно: 15:30 і 17:30. Яке зручніше?"); }],
+        [1500, function () { setClock("23:47:09"); setPill("Відповідь за кілька секунд"); say("b", "Вітаю! Я AI-асистент студії. Манікюр з гель-лаком коштує 900 грн, приблизно дві години. Завтра, у середу 22.10, вільно о 15:30 і 17:30. Який час зручніший?"); }],
         [3400, function () { say("c", "А на короткі нігті гель-лак можна?"); }],
         [900,  function () { typing(); }],
         [1300, function () { say("b", "Так, можна. Майстер підбере форму під вашу довжину. Записати вас на 15:30?"); }],
         [2400, function () { say("c", "Так, на 15:30. Я Анна"); }],
         [900,  function () { setPill("Бот створює запис"); typing(); }],
-        [1300, function () { say("b", "Анно, ви записані на завтра, 15:30: манікюр з гель-лаком, 900 грн. Якщо плани зміняться, напишіть сюди. До зустрічі!"); }],
-        [1100, function () { book(); notify("Новий запис", ["Анна · завтра, 15:30", "Манікюр з гель-лаком · 900 грн", "Записав бот. Робити нічого не треба."]); setPill("Запис уже в календарі"); }],
+        [1300, function () { say("b", "Анна, вас записано: манікюр з гель-лаком, середа, 22.10 о 15:30. Вартість: 900 грн. Адреса: вул. Прикладна, 1. Якщо плани зміняться, напишіть сюди."); }],
+        [1100, function () { book(); notify("Новий запис", ["Анна · середа, 22.10 о 15:30", "Манікюр з гель-лаком · 900 грн", "Записав бот. Нічого робити не треба."]); setPill("Запис уже в календарі"); }],
         [3000, function () { setClock("09:00"); setPill("Ранок: майстер бачить готовий запис"); }]
       ]
     },
@@ -349,7 +381,7 @@ p { margin: 0; }
       first: "Добрий вечір! У мене алергія на акрил. Це небезпечно для мене?",
       steps: [
         [900,  function () { setPill("Бот вирішує, чи може відповісти"); typing(); }],
-        [1700, function () { say("b", "Це питання краще поставити майстру, я не даю медичних порад. Передаю їй ваше запитання, вона відповість вам тут."); setPill("Передано майстру"); }],
+        [1700, function () { say("b", "Вітаю! Я AI-асистент студії. Це питання краще уточнити в студії. Ваше повідомлення вже передано, вам відповідять тут найближчим часом."); setPill("Передано майстру"); }],
         [1100, function () { notify("Потрібна ваша відповідь", ["Анна питає про алергію на акрил", "Бот замовк і чекає на вас."], "Відповісти"); setPill("Бот мовчить, чекає майстра"); }],
         [3200, function () { say("m", "Анно, добрий вечір! Це Олена. Розкажіть, що саме спричиняє алергію, і підберемо матеріали.", "Олена, майстер"); setPill("Відповідає людина"); }],
         [2600, function () { setPill("Бот нічого не вигадав"); }]
@@ -394,3 +426,5 @@ p { margin: 0; }
   play(0, !reduce);
 })();
 </script>
+</body>
+</html>

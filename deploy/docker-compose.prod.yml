@@ -1,0 +1,73 @@
+# Production on one VPS (docs/adr/0001-hosting.md). Run from the repository root:
+#   docker compose -f deploy/docker-compose.prod.yml --env-file .env up -d --build
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ai_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-ai_admin}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ai_admin} -d ${POSTGRES_DB:-ai_admin}"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  migrate:
+    build: ..
+    restart: "no"
+    command: ["alembic", "upgrade", "head"]
+    env_file: ../.env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-ai_admin}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-ai_admin}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    build: ..
+    restart: unless-stopped
+    env_file: ../.env
+    environment:
+      ENV: prod
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-ai_admin}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-ai_admin}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  worker:
+    build: ..
+    restart: unless-stopped
+    command: ["python", "-m", "app.worker.main"]
+    env_file: ../.env
+    environment:
+      ENV: prod
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-ai_admin}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-ai_admin}
+    volumes:
+      - ../secrets:/app/secrets:ro
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+
+volumes:
+  db_data:
+  caddy_data:
+  caddy_config:

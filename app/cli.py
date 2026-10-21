@@ -81,6 +81,33 @@ async def cmd_preview(slug: str) -> int:
     return 0
 
 
+async def cmd_set_webhooks() -> int:
+    """Point Telegram bots at PUBLIC_BASE_URL (production). Needs TELEGRAM_WEBHOOK_SECRET."""
+    from app.runtime import DEMO_UPDATES, OWNER_UPDATES, build_bots
+
+    settings = get_settings()
+    if not settings.public_base_url or settings.telegram_webhook_secret is None:
+        print("Set PUBLIC_BASE_URL and TELEGRAM_WEBHOOK_SECRET in .env", file=sys.stderr)
+        return 1
+    bots = build_bots(settings)
+    base = settings.public_base_url.rstrip("/")
+    secret = settings.telegram_webhook_secret.get_secret_value()
+    try:
+        for name, bot, updates in (
+            ("owner", bots.owner, OWNER_UPDATES),
+            ("demo", bots.demo, DEMO_UPDATES),
+        ):
+            if bot is None:
+                continue
+            url = f"{base}/webhooks/telegram/{name}"
+            await bot.set_webhook(url, secret_token=secret, allowed_updates=updates)
+            me = await bot.me()
+            print(f"@{me.username}: webhook -> {url}")
+    finally:
+        await bots.close()
+    return 0
+
+
 async def cmd_chat(slug: str) -> int:
     settings, factory = _factory()
     try:
@@ -156,11 +183,15 @@ def main() -> None:
     pv.add_argument("slug")
     chat = sub.add_parser("chat", help="talk to a studio bot in the terminal")
     chat.add_argument("slug")
+    telegram = sub.add_parser("telegram", help="Telegram setup")
+    telegram.add_argument("action", choices=["set-webhooks"])
     args = parser.parse_args()
 
     configure_logging("WARNING")
     if args.command == "chat":
         code = asyncio.run(cmd_chat(args.slug))
+    elif args.command == "telegram":
+        code = asyncio.run(cmd_set_webhooks())
     elif args.action == "validate":
         code = asyncio.run(cmd_validate(args.path))
     elif args.action == "load":

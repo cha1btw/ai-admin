@@ -49,4 +49,13 @@ tenant-validate: ## Validate a studio file: make tenant-validate FILE=studios/pr
 tenant-load: migrate ## Load or update a studio: make tenant-load FILE=studios/private/x.json
 	uv run python -m app.cli tenant load $(FILE)
 
-.PHONY: help install db migrate run worker poll test lint fmt eval chat demo tenant-validate tenant-load
+tenant-preview: ## Show what the bot knows about a studio: make tenant-preview TENANT=demo_studio
+	uv run python -m app.cli tenant preview $(TENANT)
+
+webhooks: ## Production: point Telegram bots at PUBLIC_BASE_URL
+	uv run python -m app.cli telegram set-webhooks
+
+backup: ## Production: database backup (see deploy/backup.sh)
+	deploy/backup.sh
+
+.PHONY: help install db migrate run worker poll test lint fmt eval chat demo tenant-validate tenant-load tenant-preview webhooks backup
