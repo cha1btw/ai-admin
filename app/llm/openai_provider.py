@@ -1,4 +1,9 @@
-"""OpenAI Chat Completions with function calling (openai SDK 3.x)."""
+"""OpenAI Chat Completions with function calling (openai SDK 3.x).
+
+Also talks to OpenAI-compatible servers (Gemini, Ollama) through `base_url`. Those get only the
+parameters their docs list: no `tool_choice`, no `parallel_tool_calls`, `max_tokens` instead of
+`max_completion_tokens`.
+"""
 
 import json
 import time
@@ -19,19 +24,26 @@ class OpenAIProvider:
         timeout_s: float = 25.0,
         temperature: float | None = None,
         max_completion_tokens: int = 600,
+        base_url: str | None = None,
         client: AsyncOpenAI | None = None,
     ) -> None:
         self.model_name = model
         self._temperature = temperature
         self._max_tokens = max_completion_tokens
-        self._client = client or AsyncOpenAI(api_key=api_key, timeout=timeout_s, max_retries=1)
+        self.native = is_openai(base_url)
+        self._client = client or AsyncOpenAI(
+            api_key=api_key, base_url=base_url, timeout=timeout_s, max_retries=1
+        )
 
     async def complete(self, messages: list[ChatMessage], tools: list[ToolSpec]) -> LLMResponse:
         kwargs: dict[str, Any] = {
             "model": self.model_name,
             "messages": [_to_openai(m) for m in messages],
-            "max_completion_tokens": self._max_tokens,
         }
+        if self.native:
+            kwargs["max_completion_tokens"] = self._max_tokens
+        else:
+            kwargs["max_tokens"] = self._max_tokens
         if tools:
             kwargs["tools"] = [
                 {
@@ -44,9 +56,12 @@ class OpenAIProvider:
                 }
                 for t in tools
             ]
-            kwargs["tool_choice"] = "auto"
-            # One tool call per step keeps side effects ordered and easy to stage (R12).
-            kwargs["parallel_tool_calls"] = False
+            if self.native:
+                kwargs["tool_choice"] = "auto"
+                # One tool call per step keeps side effects ordered and easy to stage (R12).
+                # Compatible servers may return several calls; the orchestrator runs only the
+                # first one per step, so the order holds there too.
+                kwargs["parallel_tool_calls"] = False
         if self._temperature is not None:
             kwargs["temperature"] = self._temperature
 
@@ -84,6 +99,10 @@ class OpenAIProvider:
             model=response.model or self.model_name,
             latency_ms=latency_ms,
         )
+
+
+def is_openai(base_url: str | None) -> bool:
+    return base_url is None or "api.openai.com" in base_url
 
 
 def _to_openai(message: ChatMessage) -> dict[str, Any]:

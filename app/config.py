@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     llm_max_completion_tokens: int = 600
     llm_timeout_s: float = 25.0
     openai_api_key: SecretStr | None = None
+    # Any OpenAI-compatible Chat Completions API; empty means OpenAI itself. Examples:
+    # Gemini https://generativelanguage.googleapis.com/v1beta/openai/, Ollama http://localhost:11434/v1/
+    llm_base_url: str | None = None
+    llm_api_key: SecretStr | None = None  # key of that API; falls back to OPENAI_API_KEY
 
     # Telegram
     owner_bot_token: SecretStr | None = None

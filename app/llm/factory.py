@@ -27,12 +27,18 @@ def build_llm(
         from app.llm.fake import FakeLLM
 
         return FakeLLM()
-    if not settings.openai_api_key or not settings.llm_model:
-        raise LLMConfigError("Set OPENAI_API_KEY and LLM_MODEL in .env (see .env.example).")
+    key = settings.llm_api_key or settings.openai_api_key
+    if not settings.llm_model or (key is None and not settings.llm_base_url):
+        raise LLMConfigError(
+            "Set LLM_MODEL and OPENAI_API_KEY, or LLM_BASE_URL with LLM_API_KEY, in .env "
+            "(see .env.example)."
+        )
     from app.llm.openai_provider import OpenAIProvider
 
     return OpenAIProvider(
-        api_key=settings.openai_api_key.get_secret_value(),
+        # Ollama needs no key, but the SDK refuses an empty one.
+        api_key=key.get_secret_value() if key else "not-needed",
+        base_url=settings.llm_base_url,
         model=settings.llm_model,
         timeout_s=timeout_s or settings.llm_timeout_s,
         temperature=settings.llm_temperature,

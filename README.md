@@ -56,6 +56,16 @@ make worker              # processes them, replies, runs periodic jobs
 Become an admin of your local Owner Bot: put your Telegram id into `ADMIN_TELEGRAM_IDS`, then
 `/link demo_studio` in the bot or `uv run python -m app.cli tenant link demo_studio`.
 
+## Model providers
+
+OpenAI by default. Any OpenAI-compatible API works through `LLM_BASE_URL` and `LLM_API_KEY`:
+Gemini (`https://generativelanguage.googleapis.com/v1beta/openai/`) or a local Ollama
+(`http://localhost:11434/v1/`, start it with `OLLAMA_CONTEXT_LENGTH=16384` because the default
+window of 4096 tokens is smaller than our prompt with history). Compatible servers get only the
+parameters their docs list. Free tiers are for tests with made-up data: the Gemini free tier may
+use requests to improve Google's products, so real clients need a paid tier. Choose the model
+for clients by `make eval`.
+
 ## Admin panel
 
 `/admin` on the API (founders only): studios dashboard, a form editor for every config section
