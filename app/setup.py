@@ -38,9 +38,31 @@ def set_env_values(text: str, values: dict[str, str]) -> str:
     return text
 
 
+PASTE_MARKERS = re.compile(r"\x1b\[20[01]~")
+
+
+def clean_secret(raw: str) -> str:
+    """Drops what terminals and messengers add around a pasted key: bracketed-paste markers,
+    control characters, surrounding spaces and quotes."""
+    text = PASTE_MARKERS.sub("", raw)
+    text = "".join(c for c in text if c >= " " or c == "\t")
+    return text.strip().strip("'\"«»“”").strip()
+
+
+def describe(secret: str) -> str:
+    """What was received, without showing the secret: length, first characters, warnings."""
+    note = f"отримано {len(secret)} символів, починається з «{secret[:4]}»"
+    if any(c.isspace() for c in secret):
+        note += ". Є пробіли: схоже, вставлено не той текст"
+    return note
+
+
 def ask_secret(label: str, current: str) -> str | None:
     hint = " (Enter: залишити поточний)" if current else " (Enter: пропустити)"
-    return getpass.getpass(f"{label}{hint}: ").strip() or None
+    value = clean_secret(getpass.getpass(f"{label}{hint}: "))
+    if value:
+        print(f"  {describe(value)}")
+    return value or None
 
 
 async def check_bot(token: str) -> str | None:
@@ -50,7 +72,10 @@ async def check_bot(token: str) -> str | None:
     try:
         bot = Bot(token=token)
     except Exception:
-        print("✗ Це не схоже на токен бота. Скопіюйте його з @BotFather повністю.")
+        print(
+            "✗ Це не схоже на токен бота. Він виглядає як 1234567890:AAH… "
+            "(цифри, двокрапка, ще ~35 символів). Скопіюйте його з @BotFather повністю."
+        )
         return None
     try:
         me = await bot.get_me()
@@ -68,7 +93,7 @@ async def check_bot(token: str) -> str | None:
     return me.username
 
 
-async def check_model(model: str, base_url: str | None, key: str) -> None:
+async def check_model(model: str, base_url: str | None, key: str) -> bool:
     from app.llm.base import ChatMessage, LLMError
     from app.llm.openai_provider import OpenAIProvider
 
@@ -79,8 +104,9 @@ async def check_model(model: str, base_url: str | None, key: str) -> None:
         await provider.complete([ChatMessage("user", "Відповідай одним словом: працюєш?")], [])
     except LLMError as exc:
         print(f"✗ Модель {model} не відповіла: {str(exc)[:200]}")
-        return
+        return False
     print(f"✓ Модель {model} відповідає")
+    return True
 
 
 async def learn_admin_id(token: str) -> int | None:
@@ -133,14 +159,19 @@ def run() -> int:
     base_url = env_value(text, "LLM_BASE_URL") or None
     key_name = "LLM_API_KEY" if base_url else "OPENAI_API_KEY"
     print(f"\nМодель: {model or '—'}, ключ іде в {key_name}")
-    current = env_value(text, key_name)
-    key = ask_secret("Ключ моделі (для Gemini: Google AI Studio → Get API key)", current) or current
-    if key:
-        values[key_name] = key
-        if model:
-            asyncio.run(check_model(model, base_url, key))
-        else:
+    for _ in range(3):
+        current = env_value(text, key_name)
+        key = ask_secret("Ключ моделі (Google AI Studio → Create API key)", current) or current
+        if not key:
+            break
+        if not model:
             print("! LLM_MODEL порожній у .env, модель не перевірено.")
+            values[key_name] = key
+            break
+        # A key the model rejects is not saved: a broken key would only fail later in silence.
+        if asyncio.run(check_model(model, base_url, key)):
+            values[key_name] = key
+            break
 
     if username and not env_value(text, "ADMIN_TELEGRAM_IDS"):
         print(f"\nНапишіть боту @{username} будь-яке повідомлення з вашого акаунта (чекаю 3 хв)…")

@@ -1,4 +1,4 @@
-from app.setup import env_value, set_env_values
+from app.setup import clean_secret, describe, env_value, set_env_values
 
 ENV = """# comment
 OWNER_BOT_TOKEN=
@@ -29,3 +29,14 @@ def test_values_with_special_characters_are_written_verbatim() -> None:
     assert env_value(text, "LLM_API_KEY") == value
     assert env_value(text, "OWNER_BOT_TOKEN") == value
     assert env_value(text, "LLM_MODEL") == "gemini-2.5-flash"
+
+
+def test_pasted_keys_lose_terminal_markers_quotes_and_spaces() -> None:
+    assert clean_secret("\x1b[200~123456:AAHtoken\x1b[201~\n") == "123456:AAHtoken"
+    assert clean_secret('  "AIzaKey123"  ') == "AIzaKey123"
+    assert clean_secret("«AIzaKey123»") == "AIzaKey123"
+
+
+def test_description_shows_only_length_and_prefix() -> None:
+    assert describe("123456:secretpart") == "отримано 17 символів, починається з «1234»"
+    assert "не той текст" in describe("Привіт, ось мій ключ")
