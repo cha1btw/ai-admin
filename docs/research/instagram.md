@@ -20,6 +20,8 @@
 
 **Вывод:** задача обновления токенов обязательна (у нас: за 10 дней до истечения, с алертом при ошибке).
 
+Профиль: `GET https://graph.instagram.com/v26.0/me?fields=user_id,username`. `user_id` — id профессионального аккаунта (`<IG_ID>`), и именно он приходит как `id` в вебхуках; `id` в ответе — app-scoped id, его не используем. [get-started]
+
 ## Отправка сообщений
 
 - `POST https://graph.instagram.com/v26.0/<IG_ID>/messages` (или `/me/messages`), заголовок `Authorization: Bearer <token>`, тело `{"recipient": {"id": "<IGSID>"}, "message": {"text": "..."}}`. Ответ: `recipient_id`, `message_id`. [messaging-api]
@@ -34,6 +36,7 @@
 - Проверка адреса: GET с `hub.mode=subscribe`, `hub.verify_token`, `hub.challenge`; если токен совпал, ответить значением `hub.challenge`. [webhooks-setup]
 - Подпись: заголовок `X-Hub-Signature-256` вида `sha256=<подпись>`, подпись SHA256 от тела запроса с App Secret. Документация не пишет явно «HMAC» и «сырое тело»; реализуем HMAC-SHA256 от сырого тела (стандарт Meta) и подтверждаем на первой реальной доставке. [webhooks-setup]
 - Подписка аккаунта: `POST https://graph.instagram.com/v26.0/<IG_ID>/subscribed_apps?subscribed_fields=<поля>&access_token=<токен>`, ответ `{"success": true}`. [webhooks-setup]
+- Поля вебхуков для Instagram Login: `messages`, `message_echoes`, `message_reactions`, `messaging_seen`, `messaging_postbacks`, `messaging_referral`, `messaging_optins`, `messaging_handover`, `standby`. **`message_echoes` требует `instagram_business_manage_comments`**, поэтому мы просим это право и подписываемся на `messages,message_echoes`. Поля `message_edit` в матрице нет; правки обрабатываем, если придут. [webhooks-fields]
 - Повторы: Meta повторяет сразу, потом реже в течение 36 часов, затем отбрасывает; одно событие может прийти несколько раз. Эндпоинт должен быстро отвечать 200 и сам убирать дубли. [webhooks-setup, webhooks]
 - Поля событий: `is_echo` (сообщение отправил сам аккаунт), `is_self` (self messaging), `message_edit` (`mid`, `text`, `num_edit`), `is_deleted`, реакции (`action` = `react`/`unreact`, `reaction`, `emoji`), прочтения (`read.mid`), ответ на сторис (`reply_to.story.url`, `reply_to.story.id`), вложения, включая `story_mention`. [webhooks-examples]
 - Эхо приходит и когда аккаунт пишет из самого приложения (задокументировано для self messaging). Поле, отличающее отправку через API от ручной, **не описано**. [self-messaging]
@@ -61,3 +64,5 @@ Self messaging: профессиональный аккаунт пишет са�
 - [webhooks-setup] https://developers.facebook.com/documentation/instagram-platform/webhooks/setup
 - [webhooks-examples] https://developers.facebook.com/documentation/instagram-platform/webhooks/examples
 - [self-messaging] https://developers.facebook.com/documentation/instagram-platform/self-messaging
+- [get-started] https://developers.facebook.com/documentation/instagram-platform/instagram-api-with-instagram-login/get-started
+- [webhooks-fields] https://developers.facebook.com/documentation/instagram-platform/webhooks/fields

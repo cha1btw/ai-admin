@@ -108,6 +108,19 @@ async def cmd_set_webhooks() -> int:
     return 0
 
 
+def cmd_instagram_link(slug: str) -> int:
+    """Print the Business Login link for a studio (valid 3 days, bound to the studio)."""
+    from app.channels.instagram import InstagramError, authorize_url
+    from app.core.crypto import CryptoError
+
+    try:
+        print(authorize_url(get_settings(), slug))
+    except (InstagramError, CryptoError) as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    return 0
+
+
 async def cmd_chat(slug: str) -> int:
     settings, factory = _factory()
     try:
@@ -185,6 +198,9 @@ def main() -> None:
     chat.add_argument("slug")
     telegram = sub.add_parser("telegram", help="Telegram setup")
     telegram.add_argument("action", choices=["set-webhooks"])
+    instagram = sub.add_parser("instagram", help="Instagram setup")
+    instagram.add_argument("action", choices=["link"])
+    instagram.add_argument("slug")
     args = parser.parse_args()
 
     configure_logging("WARNING")
@@ -192,6 +208,8 @@ def main() -> None:
         code = asyncio.run(cmd_chat(args.slug))
     elif args.command == "telegram":
         code = asyncio.run(cmd_set_webhooks())
+    elif args.command == "instagram":
+        code = cmd_instagram_link(args.slug)
     elif args.action == "validate":
         code = asyncio.run(cmd_validate(args.path))
     elif args.action == "load":
