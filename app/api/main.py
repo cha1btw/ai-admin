@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api import health
+from app.api import health, telegram
 from app.config import Settings, get_settings
 from app.core.logging import configure_logging
 from app.db.session import make_engine, make_session_factory
@@ -26,6 +26,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(title="AI-admin", lifespan=lifespan, docs_url=None, redoc_url=None)
     app.include_router(health.router)
+    app.include_router(telegram.router)
     return app
 
 

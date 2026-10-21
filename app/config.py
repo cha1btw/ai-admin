@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     admin_telegram_ids: Annotated[list[int], NoDecode] = Field(default_factory=list)
     alert_chat_id: int | None = None
     demo_owner_chat_id: int | None = None
+    demo_tenant_slug: str = "demo_studio"
 
     # Meta / Instagram
     meta_app_id: str | None = None

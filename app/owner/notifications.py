@@ -164,7 +164,7 @@ async def _conversation_bits(session, conversation_id: int) -> tuple[Conversatio
     return conversation, client, CHANNEL_LABELS.get(account.kind, account.kind)
 
 
-async def _last_client_text(session, conversation_id: int) -> str:
+async def last_client_text(session, conversation_id: int) -> str:
     text = await session.scalar(
         select(Message.text)
         .where(
@@ -260,7 +260,7 @@ async def _handoff(app, session, tenant, cfg, event: HandoffStarted) -> None:
     conversation, client, channel = await _conversation_bits(session, event.conversation_id)
     if conversation.is_sandbox:
         return
-    last = await _last_client_text(session, conversation.id)
+    last = await last_client_text(session, conversation.id)
     lines = [
         "🙋 Потрібна ваша відповідь",
         f"Причина: {REASON_LABELS.get(event.reason, event.reason)}",
@@ -301,7 +301,7 @@ def draft_keyboard(draft: Draft) -> Keyboard:
 
 async def draft_text(session, draft: Draft) -> str:
     _, client, channel = await _conversation_bits(session, draft.conversation_id)
-    last = await _last_client_text(session, draft.conversation_id)
+    last = await last_client_text(session, draft.conversation_id)
     lines = [
         "✍️ Чернетка відповіді",
         f"{client_label(client)} ({channel}): «{last}»",

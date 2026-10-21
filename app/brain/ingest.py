@@ -27,6 +27,7 @@ class Inbound:
     media: dict[str, Any] | None = None
     is_story_reply: bool = False
     display_name: str | None = None
+    language: str | None = None  # hint from the platform, e.g. Telegram language_code
 
 
 async def get_or_create_conversation(
@@ -121,6 +122,8 @@ async def record_client_message(
     conversation.last_client_message_at = now
     conversation.reply_due_at = now + debounce
     client.last_seen_at = now
+    if client.language is None and inbound.language in ("uk", "ru", "en", "pl"):
+        client.language = inbound.language
     return message
 
 
@@ -131,6 +134,8 @@ async def record_outgoing(
     external_message_id: str | None,
     text: str | None,
     now: datetime,
+    *,
+    from_bot: bool = False,
 ) -> Conversation | None:
     """A message sent from the studio's account (Instagram echo, Telegram business message
     written by the owner). Our own replies are only marked delivered; anything else means a
@@ -155,6 +160,8 @@ async def record_outgoing(
         for message in recent_bot:
             if message.text and needle and needle in " ".join(message.text.split()):
                 return None
+    if from_bot:
+        return None  # sent by a bot on the studio's behalf: never a human takeover
 
     session.add(
         Message(

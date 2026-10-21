@@ -31,6 +31,7 @@ from app.core.logging import get_logger
 from app.core.text import clean_reply
 from app.db.models import (
     SLOT_HOLDING_STATUSES,
+    AuditLog,
     Booking,
     ChannelAccount,
     Client,
@@ -551,6 +552,15 @@ async def _finish(st: _State, plan: ReplyPlan, turn: Turn) -> ReplyPlan:
     if turn.handoff is not None:
         reason, summary = turn.handoff
         start_handoff(conversation, reason, st.now)
+        st.session.add(
+            AuditLog(
+                tenant_id=st.tenant.id,
+                actor="bot",
+                action="handoff",
+                details={"reason": reason, "conversation_id": conversation.id},
+                created_at=st.now,
+            )
+        )
         plan.events.append(HandoffStarted(st.tenant.id, conversation.id, reason, summary))
     plan.events += [
         dataclasses.replace(e, message_id=message.id) if isinstance(e, BookingCreated) else e

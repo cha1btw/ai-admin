@@ -28,6 +28,24 @@ OWNER_TG = 111
 ALERT_CHAT = 999
 
 
+class RecordingChannel:
+    """Records outgoing texts; window and limits like a real channel."""
+
+    def __init__(self, kind: str, window: timedelta | None = None, max_bytes: int | None = None):
+        self.kind = kind
+        self.window = window
+        self.max_bytes = max_bytes
+        self.max_chars = None
+        self.sent: list[tuple[str, str]] = []
+
+    async def send_text(self, account, recipient_id: str, text: str) -> list[str]:
+        self.sent.append((recipient_id, text))
+        return [f"{self.kind}-{len(self.sent)}"]
+
+    def texts(self) -> list[str]:
+        return [text for _, text in self.sent]
+
+
 @pytest.fixture
 def clock() -> FrozenClock:
     return FrozenClock(kyiv("2026-10-20 23:47"))  # Tuesday night, like the landing demo
@@ -49,7 +67,12 @@ def app(session_factory: SessionFactory, clock: FrozenClock, llm: FakeLLM) -> Ap
         session_factory=session_factory,
         llm=llm,
         clock=clock,
-        channels={"cli": CLIChannel(), "sandbox": CLIChannel()},
+        channels={
+            "cli": CLIChannel(),
+            "sandbox": CLIChannel(),
+            "telegram_business": RecordingChannel("telegram_business", window=timedelta(hours=24)),
+            "telegram_demo": RecordingChannel("telegram_demo"),
+        },
         calendars=default_calendars(),
         notifier=notifier,
         alerts=Alerts(notifier, ALERT_CHAT, clock),

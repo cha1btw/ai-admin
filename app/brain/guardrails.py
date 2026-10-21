@@ -144,7 +144,8 @@ def disclosure_needed(conversation: Conversation, now: datetime, silence_days: i
         return "disclosure_first"
     if (
         conversation.last_human_message_at
-        and conversation.last_human_message_at > conversation.disclosed_at
+        # >=: if a human wrote at the same moment, disclosing again is the honest choice.
+        and conversation.last_human_message_at >= conversation.disclosed_at
     ):
         return "disclosure_return"
     last = conversation.last_bot_message_at or conversation.disclosed_at
