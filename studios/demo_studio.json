@@ -1,0 +1,145 @@
+{
+  "slug": "demo_studio",
+  "name": "Demo Nail Studio",
+  "city": "Київ",
+  "timezone": "Europe/Kyiv",
+  "currency": "UAH",
+  "default_language": "uk",
+  "allowed_languages": ["uk", "ru", "en", "pl"],
+  "calendar_provider": "internal",
+  "initial_mode": "autopilot",
+  "profile": {
+    "address": "вул. Демонстраційна, 1, Київ (вигадана адреса)",
+    "how_to_find": "Вхід з двору, другий поверх, двері праворуч.",
+    "phone": "+380000000000",
+    "payment_methods": ["готівка", "картка"],
+    "extra_info": [
+      "Це демонстраційна студія: назва, ціни й адреса вигадані, записи пробні.",
+      "Під час повітряної тривоги процедуру призупиняємо й переходимо в укриття поруч. Світло є: працює генератор."
+    ]
+  },
+  "hours": {
+    "mon": [{"start": "10:00", "end": "20:00"}],
+    "tue": [{"start": "10:00", "end": "20:00"}],
+    "wed": [{"start": "10:00", "end": "20:00"}],
+    "thu": [{"start": "10:00", "end": "20:00"}],
+    "fri": [{"start": "10:00", "end": "20:00"}],
+    "sat": [{"start": "10:00", "end": "18:00"}],
+    "sun": []
+  },
+  "owner_hours": {
+    "mon": [{"start": "09:00", "end": "21:00"}],
+    "tue": [{"start": "09:00", "end": "21:00"}],
+    "wed": [{"start": "09:00", "end": "21:00"}],
+    "thu": [{"start": "09:00", "end": "21:00"}],
+    "fri": [{"start": "09:00", "end": "21:00"}],
+    "sat": [{"start": "09:00", "end": "19:00"}],
+    "sun": []
+  },
+  "breaks": [],
+  "exceptions": [
+    {"date": "2026-12-31", "hours": [{"start": "10:00", "end": "15:00"}], "note": "Передноворічний скорочений день"},
+    {"date": "2027-01-01", "closed": true, "note": "Новий рік"}
+  ],
+  "services": [
+    {
+      "id": "gel_manicure",
+      "name": "Манікюр з гель-лаком",
+      "aliases": ["гель-лак", "шелак", "манікюр з покриттям", "маникюр с покрытием"],
+      "price_type": "fixed",
+      "price_min": 900,
+      "duration_min": 120,
+      "buffer_min": 15,
+      "description": "Апаратний або комбінований манікюр, вирівнювання, покриття гель-лаком."
+    },
+    {
+      "id": "manicure_no_coating",
+      "name": "Манікюр без покриття",
+      "aliases": ["гігієнічний манікюр", "чоловічий манікюр"],
+      "price_type": "fixed",
+      "price_min": 450,
+      "duration_min": 60,
+      "buffer_min": 15
+    },
+    {
+      "id": "gel_pedicure",
+      "name": "Педикюр з гель-лаком",
+      "aliases": ["педикюр з покриттям", "педикюр"],
+      "price_type": "fixed",
+      "price_min": 1100,
+      "duration_min": 90,
+      "buffer_min": 15
+    },
+    {
+      "id": "nail_extension",
+      "name": "Нарощування нігтів",
+      "aliases": ["нарощування", "наращивание"],
+      "price_type": "from",
+      "price_min": 1300,
+      "duration_min": 150,
+      "buffer_min": 15,
+      "description": "Ціна залежить від довжини та форми, остаточну назве майстер."
+    },
+    {
+      "id": "gel_removal",
+      "name": "Зняття гель-лаку",
+      "aliases": ["зняття покриття"],
+      "price_type": "fixed",
+      "price_min": 200,
+      "duration_min": 30,
+      "buffer_min": 0
+    },
+    {
+      "id": "art_design",
+      "name": "Складний дизайн нігтів",
+      "aliases": ["арт", "розпис"],
+      "price_type": "on_request",
+      "duration_min": 120,
+      "buffer_min": 15,
+      "description": "Ціну майстер визначає за фото референсу."
+    }
+  ],
+  "staff": [
+    {
+      "id": "olena",
+      "name": "Олена",
+      "services": ["gel_manicure", "manicure_no_coating", "gel_pedicure", "nail_extension", "gel_removal", "art_design"]
+    },
+    {
+      "id": "iryna",
+      "name": "Ірина",
+      "services": ["gel_manicure", "manicure_no_coating", "gel_pedicure", "gel_removal"]
+    }
+  ],
+  "cancellation": {
+    "free_cancel_hours": 24,
+    "late_policy_text": "Якщо скасовуєте пізніше ніж за 24 години до візиту, наступний запис можливий лише з передоплатою."
+  },
+  "faq": [
+    {"q": "Чи можна гель-лак на короткі нігті?", "a": "Так, можна. Майстер підбере форму під вашу довжину."},
+    {"q": "Скільки тримається гель-лак?", "a": "Зазвичай 3–4 тижні."},
+    {"q": "Чи стерилізуєте інструменти?", "a": "Так, інструменти проходять повний цикл стерилізації в сухожаровій шафі, одноразові пилки нові для кожної клієнтки."},
+    {"q": "Скільки коштує дизайн?", "a": "Простий дизайн від 30 грн за ніготь. Ціну складного дизайну майстер називає за фото."},
+    {"q": "Чи є парковка?", "a": "Так, біля будинку є безкоштовна парковка."}
+  ],
+  "tone": {
+    "notes": "Тепло, коротко, на «ви». Без зменшувально-пестливих слів.",
+    "examples": [
+      "Добрий вечір! На завтра є вільні вікна о 15:30 і 17:30. Яке вам зручніше?",
+      "Дякуємо, що написали! Ціна манікюру з гель-лаком 900 грн, триває приблизно дві години."
+    ]
+  },
+  "booking": {
+    "min_lead_minutes": 60,
+    "horizon_days": 30,
+    "slot_step_minutes": 30,
+    "max_slots_returned": 6,
+    "max_active_bookings_per_client": 2,
+    "require_phone": false
+  },
+  "limits": {
+    "replies_per_hour": 30,
+    "daily_token_budget": 400000
+  },
+  "internal_notes": "Публічна демо-студія. Записи пробні й видаляються щодня."
+}

@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Secrets and local data
+.env
+.env.*
+!.env.example
+secrets/
+studios/private/
+*.service-account.json
+
+# Eval reports and backups
+tests/evals/reports/
+backups/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/

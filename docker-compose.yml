@@ -1,0 +1,49 @@
+# Development stack. `make db` starts only Postgres; `docker compose --profile app up` runs everything.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ai_admin
+      POSTGRES_PASSWORD: ai_admin
+      POSTGRES_DB: ai_admin
+    ports:
+      - "5435:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./deploy/db-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ai_admin -d ai_admin"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  api:
+    build: .
+    profiles: ["app"]
+    command: ["uvicorn", "app.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+asyncpg://ai_admin:ai_admin@db:5432/ai_admin
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  worker:
+    build: .
+    profiles: ["app"]
+    command: ["python", "-m", "app.worker.main"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+asyncpg://ai_admin:ai_admin@db:5432/ai_admin
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db_data:
