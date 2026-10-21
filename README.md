@@ -36,8 +36,8 @@ whether two bookings may overlap (Postgres exclusion constraint).
 Requirements: Python 3.12, [uv](https://docs.astral.sh/uv/), Docker.
 
 ```bash
-cp .env.example .env     # fill OPENAI_API_KEY and LLM_MODEL to talk to the bot
 make install
+make setup               # asks for the bot token and model key (hidden), finds your Telegram id
 make migrate             # starts Postgres on localhost:5435 and applies migrations
 make demo                # loads the demo studio
 make chat                # talk to the demo studio in the terminal

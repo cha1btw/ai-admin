@@ -8,6 +8,9 @@ help: ## Show available targets
 install: ## Install dependencies into .venv
 	uv sync
 
+setup: ## First run: bot token, model key, your Telegram id (hidden input, writes .env)
+	uv run python -m app.setup
+
 db: ## Start Postgres in Docker (localhost:5435)
 	docker compose up -d --wait db
 
@@ -61,4 +64,4 @@ webhooks: ## Production: point Telegram bots at PUBLIC_BASE_URL
 backup: ## Production: database backup (see deploy/backup.sh)
 	deploy/backup.sh
 
-.PHONY: help install db migrate run admin worker poll test lint fmt eval chat demo tenant-validate tenant-load tenant-preview webhooks backup
+.PHONY: help install setup db migrate run admin worker poll test lint fmt eval chat demo tenant-validate tenant-load tenant-preview webhooks backup
