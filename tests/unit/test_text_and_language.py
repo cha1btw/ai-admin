@@ -74,3 +74,14 @@ def test_choose_language_respects_allowed_list() -> None:
     assert choose_language("ru", None, ["uk"], "uk") == "uk"
     assert choose_language("en", None, ["uk", "en"], "uk") == "en"
     assert choose_language(None, "pl", ["uk", "pl"], "uk") == "pl"
+
+
+def test_empty_env_values_mean_unset(tmp_path, monkeypatch) -> None:
+    from app.config import Settings
+
+    env = tmp_path / ".env"
+    env.write_text("LLM_TEMPERATURE=\nALERT_CHAT_ID=\nADMIN_TELEGRAM_IDS=1, 2\n")
+    monkeypatch.chdir(tmp_path)
+    settings = Settings()
+    assert settings.llm_temperature is None and settings.alert_chat_id is None
+    assert settings.admin_telegram_ids == [1, 2]
