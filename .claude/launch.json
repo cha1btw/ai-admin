@@ -1,0 +1,48 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "landing",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8020",
+        "--bind",
+        "127.0.0.1",
+        "--directory",
+        "landing"
+      ],
+      "port": 8020
+    },
+    {
+      "name": "api",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": [
+        "run",
+        "uvicorn",
+        "app.api.main:app",
+        "--port",
+        "8000",
+        "--reload",
+        "--reload-dir",
+        "app"
+      ],
+      "port": 8000
+    },
+    {
+      "name": "admin-demo",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8030",
+        "--bind",
+        "127.0.0.1",
+        "--directory",
+        "dist/sites/admin-demo"
+      ],
+      "port": 8030
+    }
+  ]
+}

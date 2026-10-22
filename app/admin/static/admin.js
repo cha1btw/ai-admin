@@ -77,6 +77,8 @@ function h(tag, attrs, ...kids) {
 }
 
 async function api(method, path, body) {
+  // The public demo (sites/admin-demo) answers from sample data in the browser.
+  if (window.demoApi) return window.demoApi(method, path, body === undefined ? undefined : clone(body));
   const headers = { "X-Admin-Request": "1" };
   if (body !== undefined) headers["Content-Type"] = "application/json";
   const res = await fetch("/admin/api" + path, {
@@ -469,8 +471,10 @@ async function boot() {
   document.getElementById("topbar-right").replaceChildren(
     h("span", { class: "badge " + (llm.ready ? "ok" : "bad"), title: "Модель для відповідей бота" },
       llm.ready ? `Модель: ${llm.model || llm.provider}` : "Модель не налаштована"),
-    h("form", { method: "post", action: "/admin/logout" },
-      h("button", { class: "btn ghost small", type: "submit" }, "Вийти")));
+    window.demoApi
+      ? h("span", { class: "badge warn", title: "Дані вигадані, зміни не зберігаються" }, "Демо")
+      : h("form", { method: "post", action: "/admin/logout" },
+        h("button", { class: "btn ghost small", type: "submit" }, "Вийти")));
   window.addEventListener("hashchange", guardedRoute);
   window.addEventListener("beforeunload", (e) => { if (isDirty()) { e.preventDefault(); e.returnValue = ""; } });
   if (!location.hash) location.hash = "#/studios";

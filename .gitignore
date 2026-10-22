@@ -26,3 +26,6 @@ backups/
 
 # Browser tool output (screenshots, console logs)
 .playwright-mcp/
+
+# Built public sites (scripts/build_sites.py)
+dist/
