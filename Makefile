@@ -23,6 +23,10 @@ run: migrate ## API with auto-reload on :8000
 admin: ## Login link to the admin panel (open it while `make run` is running)
 	uv run python -m app.cli admin link
 
+sites: ## Rebuild the landing and admin demo, push to the public repo cha1btw/ai-admin-sites
+	uv run python scripts/build_sites.py
+	cd dist/sites && git add -A && (git diff --cached --quiet || git commit -qm "Update sites") && git push -q origin main
+
 worker: migrate ## Worker: inbound queue, replies, periodic jobs
 	uv run python -m app.worker.main
 
@@ -64,4 +68,4 @@ webhooks: ## Production: point Telegram bots at PUBLIC_BASE_URL
 backup: ## Production: database backup (see deploy/backup.sh)
 	deploy/backup.sh
 
-.PHONY: help install setup db migrate run admin worker poll test lint fmt eval chat demo tenant-validate tenant-load tenant-preview webhooks backup
+.PHONY: help install setup db migrate run admin sites worker poll test lint fmt eval chat demo tenant-validate tenant-load tenant-preview webhooks backup
