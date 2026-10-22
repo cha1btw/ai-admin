@@ -425,3 +425,15 @@ async def test_emoji_only_first_message_is_answered(app, llm, clock) -> None:
     cid = await client_says(app, studio, "👍")
     plan = await process_conversation(app, cid)
     assert plan.status == "skipped:noise"
+
+
+async def test_health_question_goes_to_the_master_whatever_the_model_says(app, llm, clock) -> None:
+    """R5 by code: the model gave advice instead of handing off; the client gets the honest
+    template and the master is told."""
+    studio = await make_studio(app)
+    llm.add(say("Гель-лак безпечний, алергії зазвичай не буває."))
+    cid = await client_says(app, studio, "Я вагітна, мені можна гель-лак?")
+    await process_conversation(app, cid)
+    assert "алергії зазвичай не буває" not in " ".join(sent(app))
+    state = await conversation(app, cid)
+    assert state.state == "HANDOFF_PENDING" and state.handoff_reason == "medical"

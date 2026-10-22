@@ -469,9 +469,11 @@ async def _model_turn(st: _State, new: list[Message]) -> Turn:
         return _merge_meta(_fallback(st, "other", "Модель не дала відповіді."), turn)
 
     client_texts = [m.text for m in new if m.text]
-    # R5, R6, R8: the model said a person will answer but did not hand off; make it real.
-    if promises_handoff(turn.text):
-        reason = "medical" if mentions_health(client_texts) else "other"
+    # R5: health questions always go to the master, whatever the model answered.
+    # R6, R8: the model said a person will answer but did not hand off; make it real.
+    health = mentions_health(client_texts)
+    if health or promises_handoff(turn.text):
+        reason = "medical" if health else "other"
         fallback = _fallback(st, reason, "Бот пообіцяв передати діалог людині.")
         fallback.text = render("handoff", st.lang, eta=eta_text(st.cfg, st.now, st.lang))
         return _merge_meta(fallback, turn)

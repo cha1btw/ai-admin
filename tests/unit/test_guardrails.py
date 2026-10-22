@@ -93,6 +93,8 @@ def test_handoff_promises_are_recognised() -> None:
     assert not promises_handoff("Майстер підбере форму під вашу довжину.")
     assert mentions_health(["У мене алергія на акрил"])
     assert not mentions_health(["Скільки коштує манікюр?"])
+    assert not mentions_health(["Ви обрізаєте шкірку?"])
+    assert promises_handoff("Зараз переведу Вас на фахівця.")
 
 
 def test_foreign_currency_is_a_violation() -> None:

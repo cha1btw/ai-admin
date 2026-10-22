@@ -173,7 +173,8 @@ def disclosure_needed(conversation: Conversation, now: datetime, silence_days: i
 # A reply that sends the client to a person without calling handoff_to_human would leave her
 # waiting while nobody is told (seen with small models). The code then makes the handoff real.
 _HANDOFF_PROMISE = re.compile(
-    r"переда(?:но|мо|ємо|ю|м|ли)|передаю|переводим|майстер (?:вам )?(?:відповість|зв.яжеться)"
+    r"переда(?:но|мо|ємо|ю|м|ли)|передаю|переводим|перевед\w*"
+    r"|майстер (?:вам )?(?:відповість|зв.яжеться)"
     r"|зверн(?:іться|итися|уться|ітися)[\w\s,]{0,30}? до (?:майстра|адміністратора|студії|фахівця)"
     r"|зв.яж\w*\s+з\s+(?:майстром|майстринею|адміністратором|студією|нами)"
     r"|свяж\w*\s+с\s+(?:мастером|администратором|студией|нами)"
@@ -184,8 +185,9 @@ _HANDOFF_PROMISE = re.compile(
     re.IGNORECASE,
 )
 _HEALTH = re.compile(
-    r"алерг|аллерг|вагітн|беремен|протипоказ|противопоказ|шкір|кожа|кожи|реакці|реакци|опік"
-    r"|запален|воспал|грибок|allerg|pregnan|rash|alergi|ciąż",
+    # Not "шкіра": "обрізаєте шкірку?" is an ordinary manicure question.
+    r"алерг|аллерг|вагітн|беремен|протипоказ|противопоказ|реакці|реакци|опік"
+    r"|запален|воспал|грибок|allerg|pregnan|alergi|ciąż",
     re.IGNORECASE,
 )
 
