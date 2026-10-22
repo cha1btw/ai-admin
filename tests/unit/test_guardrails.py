@@ -87,6 +87,8 @@ def test_handoff_promises_are_recognised() -> None:
     assert promises_handoff("Для знижки зверніться, будь ласка, до адміністратора.")
     assert promises_handoff("Ваше повідомлення передано, майстер відповість завтра.")
     assert promises_handoff("The studio will get back to you tomorrow.")
+    assert promises_handoff("Для уточнення я зв'яжуся з майстром. Очікуйте на відповідь.")
+    assert promises_handoff("Щодо 31 грудня зв'яжіться з нами для уточнення деталей.")
     assert not promises_handoff("Передоплата 300 грн, реквізити надішлемо після запису.")
     assert not promises_handoff("Майстер підбере форму під вашу довжину.")
     assert mentions_health(["У мене алергія на акрил"])

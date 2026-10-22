@@ -16,8 +16,11 @@ def _ranges(ranges: list[TimeRange]) -> str:
     return ", ".join(f"{r.start:%H:%M}–{r.end:%H:%M}" for r in ranges)
 
 
+SPECIAL_DAYS_AHEAD = 365  # clients ask about New Year in October, beyond the booking horizon
+
+
 def public_studio_data(cfg: StudioConfig, today: date) -> dict[str, Any]:
-    horizon = today + timedelta(days=cfg.booking.horizon_days)
+    horizon = today + timedelta(days=SPECIAL_DAYS_AHEAD)
     staff_by_service = {s.id: [m.name for m in cfg.staff_for_service(s.id)] for s in cfg.services}
 
     data: dict[str, Any] = {

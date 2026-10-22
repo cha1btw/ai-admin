@@ -93,4 +93,12 @@ def test_public_data_hides_internal_fields() -> None:
     assert services["art_design"]["price"] == "за консультацією"
     assert public["working_hours"]["неділя"] == "вихідний"
     # Upcoming special days are listed with their weekday.
-    assert public["special_days"] == []  # 2026-12-31 is beyond the 30-day horizon
+    # Holidays beyond the booking horizon are listed too: clients ask about New Year early.
+    assert public["special_days"] == [
+        {
+            "date": "четвер, 31.12",
+            "hours": "10:00–15:00",
+            "note": "Передноворічний скорочений день",
+        },
+        {"date": "п'ятниця, 01.01", "hours": "вихідний", "note": "Новий рік"},
+    ]
