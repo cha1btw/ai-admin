@@ -78,3 +78,16 @@ def test_eta_follows_owner_hours() -> None:
     assert eta_text(cfg, kyiv("2026-10-24 20:00"), "pl") == "w poniedziałek po 09:00"
     assert in_owner_hours(cfg, kyiv("2026-10-21 10:00"))
     assert not in_owner_hours(cfg, kyiv("2026-10-25 10:00"))
+
+
+def test_handoff_promises_are_recognised() -> None:
+    from app.brain.guardrails import mentions_health, promises_handoff
+
+    assert promises_handoff("З питаннями про алергію ми переводимо вас на фахівця.")
+    assert promises_handoff("Для знижки зверніться, будь ласка, до адміністратора.")
+    assert promises_handoff("Ваше повідомлення передано, майстер відповість завтра.")
+    assert promises_handoff("The studio will get back to you tomorrow.")
+    assert not promises_handoff("Передоплата 300 грн, реквізити надішлемо після запису.")
+    assert not promises_handoff("Майстер підбере форму під вашу довжину.")
+    assert mentions_health(["У мене алергія на акрил"])
+    assert not mentions_health(["Скільки коштує манікюр?"])

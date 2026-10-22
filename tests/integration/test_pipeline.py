@@ -389,3 +389,27 @@ async def test_daily_token_budget_stops_model_calls(app, llm, clock) -> None:
     assert llm.calls == []
     assert sent(app)[0].endswith("Дякуємо за повідомлення! Вам відповідять тут завтра після 09:00.")
     assert any("бюджет" in text for text in app.alerts.sent)
+
+
+async def test_promised_handoff_without_the_tool_becomes_a_real_one(app, llm, clock) -> None:
+    """Small models say "передаємо майстру" without calling handoff_to_human (seen live with
+    Gemini flash-lite); the code hands off so the master is really told (R5, R8)."""
+    studio = await make_studio(app)
+    llm.add(say("З питаннями про алергію ми переводимо вас на фахівця."))
+    cid = await client_says(app, studio, "У мене алергія на акрил, мені можна?")
+    await process_conversation(app, cid)
+    assert sent(app) == [
+        f"{DISCLOSURE} Це питання краще уточнити в студії. Ваше повідомлення вже передано, "
+        "вам відповідять тут завтра після 09:00."
+    ]
+    state = await conversation(app, cid)
+    assert state.state == "HANDOFF_PENDING" and state.handoff_reason == "medical"
+    assert any(n.text.startswith("🙋 Потрібна ваша відповідь") for n in app.notifier.sent)
+
+
+async def test_detected_language_is_named_in_the_prompt(app, llm, clock) -> None:
+    studio = await make_studio(app)
+    llm.add(say("A gel manicure costs 900 UAH."))
+    cid = await client_says(app, studio, "Hi! How much is a gel manicure?")
+    await process_conversation(app, cid)
+    assert "Мова відповіді: англійською" in llm.last_system_prompt

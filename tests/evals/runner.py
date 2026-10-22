@@ -14,6 +14,7 @@ import asyncio
 import json
 import os
 import sys
+import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -37,7 +38,7 @@ from app.db import models  # noqa: F401
 from app.db.base import Base
 from app.db.models import Booking, ChannelAccount, Conversation, Message, OfferedSlot, Service
 from app.db.session import make_engine, make_session_factory
-from app.llm.base import ChatMessage, LLMProvider
+from app.llm.base import ChatMessage, LLMError, LLMProvider
 from app.llm.factory import LLMConfigError, build_llm
 from app.owner.notifier import RecordingNotifier
 from app.scheduling.availability import free_slots, offer_slots, staff_for_service
@@ -274,6 +275,32 @@ def load_cases(only: str | None, directory: Path = CASES_DIR) -> list[dict[str, 
     return cases
 
 
+class PacedLLM:
+    """Keeps evals inside free-tier quotas (e.g. Gemini: 15 requests per minute per model):
+    spaces calls out and waits out a 429 instead of counting it as a model failure."""
+
+    def __init__(self, inner: LLMProvider, min_interval_s: float, retries: int = 6) -> None:
+        self.inner = inner
+        self.model_name = inner.model_name
+        self.min_interval_s = min_interval_s
+        self.retries = retries
+        self._last = 0.0
+
+    async def complete(self, messages, tools):
+        for attempt in range(self.retries + 1):
+            wait = self._last + self.min_interval_s - time.monotonic()
+            if wait > 0:
+                await asyncio.sleep(wait)
+            self._last = time.monotonic()
+            try:
+                return await self.inner.complete(messages, tools)
+            except LLMError as exc:
+                if "429" not in str(exc) or attempt == self.retries:
+                    raise
+                await asyncio.sleep(15)
+        raise AssertionError("unreachable")
+
+
 async def amain(args: argparse.Namespace) -> int:
     settings = get_settings()
     try:
@@ -281,6 +308,8 @@ async def amain(args: argparse.Namespace) -> int:
     except LLMConfigError as exc:
         print(exc, file=sys.stderr)
         return 2
+    if args.rpm:
+        llm = PacedLLM(llm, 60 / args.rpm)
     cfg = Config(str(ROOT / "alembic.ini"))
     cfg.set_main_option("sqlalchemy.url", TEST_DATABASE_URL)
     cfg.attributes["configure_logger"] = False
@@ -325,6 +354,9 @@ def main() -> None:
     parser.add_argument("--case", help="run one case by id")
     parser.add_argument("--runs", type=int, default=0, help="runs per case (default: 3 for hard)")
     parser.add_argument("--dir", help="cases directory, e.g. tests/evals/cases/private")
+    parser.add_argument(
+        "--rpm", type=float, default=0, help="max model requests per minute (free tiers: 14)"
+    )
     sys.exit(asyncio.run(amain(parser.parse_args())))
 
 

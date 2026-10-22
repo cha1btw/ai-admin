@@ -87,8 +87,18 @@ class OpenAIProvider:
                 parsed = json.loads(raw)
             except json.JSONDecodeError:
                 parsed = {"_invalid_json": raw}
+            # The SDK keeps unknown fields such as Gemini's extra_content in model_extra.
+            extra = getattr(tc, "extra_content", None)
+            if extra is None:
+                extra = (getattr(tc, "model_extra", None) or {}).get("extra_content")
             calls.append(
-                ToolCall(tc.id, function.name, parsed if isinstance(parsed, dict) else {}, raw)
+                ToolCall(
+                    tc.id,
+                    function.name,
+                    parsed if isinstance(parsed, dict) else {},
+                    raw,
+                    extra=extra if isinstance(extra, dict) else None,
+                )
             )
         usage = response.usage
         return LLMResponse(
@@ -119,6 +129,7 @@ def _to_openai(message: ChatMessage) -> dict[str, Any]:
                         "arguments": call.raw_arguments
                         or json.dumps(call.arguments, ensure_ascii=False),
                     },
+                    **({"extra_content": call.extra} if call.extra else {}),
                 }
                 for call in message.tool_calls
             ],

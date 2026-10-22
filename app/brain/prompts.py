@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 from app.brain.i18n import weekday_name
 from app.tenants.schema import StudioConfig
 
-PROMPT_VERSION = "2026-10-22.2"
+PROMPT_VERSION = "2026-10-22.3"
 
 LANGUAGE_NAMES = {"uk": "українська", "ru": "російська", "en": "англійська", "pl": "польська"}
 REPLY_IN = {"uk": "українською", "ru": "російською", "en": "англійською", "pl": "польською"}
@@ -42,6 +42,7 @@ def build_system_prompt(
     now: datetime,
     client_bookings: list[str],
     offered_slots: list[str],
+    reply_language: str | None = None,
 ) -> str:
     if cfg.calendar_provider == "lead_capture":
         booking_block = _BOOKING_LEAD
@@ -68,4 +69,7 @@ def build_system_prompt(
         f"Активні записи клієнта: {'; '.join(client_bookings) if client_bookings else 'немає'}\n"
         f"Запропоновані слоти (ще дійсні): {'; '.join(offered_slots) if offered_slots else 'немає'}"
     )
+    if reply_language in REPLY_IN:
+        # The code detects the client's language; small models otherwise drift back to Ukrainian.
+        dynamic += f"\nМова відповіді: {REPLY_IN[reply_language]}, уся відповідь цією мовою."
     return f"{static}{tone_examples}\n\nДАНІ:\n<<<\n{data}\n>>>\n\n{dynamic}"

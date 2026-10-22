@@ -13,6 +13,7 @@ GEMINI = "https://generativelanguage.googleapis.com/v1beta/openai/"
 OLLAMA = "http://localhost:11434/v1/"
 TOOL = ToolSpec("get_free_slots", "Find free slots", {"type": "object", "properties": {}})
 MESSAGES = [ChatMessage("system", "rules"), ChatMessage("user", "Є вікно завтра?")]
+SIGNATURE = {"google": {"thought_signature": "sig-123"}}
 
 
 class FakeCompletions:
@@ -26,6 +27,7 @@ class FakeCompletions:
         call = SimpleNamespace(
             id="call_1",
             function=SimpleNamespace(name="get_free_slots", arguments='{"service_id": "gel"}'),
+            extra_content=SIGNATURE,
         )
         message = SimpleNamespace(content=None, tool_calls=[call])
         return SimpleNamespace(choices=[SimpleNamespace(message=message)], usage=None, model="")
@@ -92,3 +94,15 @@ def test_factory_allows_ollama_without_a_key() -> None:
     llm = build_llm(Settings(_env_file=None, llm_model="qwen3", llm_base_url=OLLAMA))
     assert str(llm._client.base_url) == OLLAMA
     assert llm._client.api_key == "not-needed"
+
+
+async def test_gemini_thought_signature_goes_back_with_the_call() -> None:
+    llm, completions = provider(GEMINI)
+    response = await llm.complete(MESSAGES, [TOOL])
+    call = response.tool_calls[0]
+    assert call.extra == SIGNATURE
+    follow_up = [*MESSAGES, ChatMessage("assistant", None, tool_calls=[call])]
+    follow_up.append(ChatMessage("tool", '{"slots": []}', tool_call_id=call.id))
+    await llm.complete(follow_up, [TOOL])
+    sent_call = completions.kwargs["messages"][2]["tool_calls"][0]
+    assert sent_call["extra_content"] == SIGNATURE

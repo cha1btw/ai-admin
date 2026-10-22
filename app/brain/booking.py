@@ -196,6 +196,7 @@ async def create_booking(
         due = max(due, ctx.now + timedelta(minutes=30))
     booking = Booking(
         tenant_id=ctx.tenant.id,
+        created_at=ctx.now,  # app clock, like every time the bot compares
         conversation_id=conversation.id,
         client_id=client.id,
         service_id=service.id,
@@ -367,6 +368,7 @@ async def request_booking(
     await _check_active_limit(ctx)
     booking = Booking(
         tenant_id=ctx.tenant.id,
+        created_at=ctx.now,  # app clock, like every time the bot compares
         conversation_id=conversation.id,
         client_id=client.id,
         service_id=service.id,

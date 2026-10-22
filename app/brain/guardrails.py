@@ -152,3 +152,29 @@ def disclosure_needed(conversation: Conversation, now: datetime, silence_days: i
     if now - last > timedelta(days=silence_days):
         return "disclosure_first"
     return None
+
+
+# A reply that sends the client to a person without calling handoff_to_human would leave her
+# waiting while nobody is told (seen with small models). The code then makes the handoff real.
+_HANDOFF_PROMISE = re.compile(
+    r"переда(?:но|мо|ємо|ю|м|ли)|передаю|переводим|майстер (?:вам )?(?:відповість|зв.яжеться)"
+    r"|зверн(?:іться|итися|уться|ітися)[\w\s,]{0,30}? до (?:майстра|адміністратора|студії|фахівця)"
+    r"|мастер (?:вам )?(?:ответит|свяжется)|обратитесь к (?:мастеру|администратору)"
+    r"|will (?:get back|contact you|reply)|pass(?:ed)? (?:it |this )?on"
+    r"|contact the (?:master|studio)"
+    r"|przekaż|skontaktuje się",
+    re.IGNORECASE,
+)
+_HEALTH = re.compile(
+    r"алерг|аллерг|вагітн|беремен|протипоказ|противопоказ|шкір|кожа|кожи|реакці|реакци|опік"
+    r"|запален|воспал|грибок|allerg|pregnan|rash|alergi|ciąż",
+    re.IGNORECASE,
+)
+
+
+def promises_handoff(text: str) -> bool:
+    return bool(_HANDOFF_PROMISE.search(text))
+
+
+def mentions_health(texts: list[str]) -> bool:
+    return any(_HEALTH.search(t) for t in texts)

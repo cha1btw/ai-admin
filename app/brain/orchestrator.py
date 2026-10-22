@@ -18,7 +18,14 @@ from sqlalchemy import func, select
 
 from app.brain.booking import active_bookings
 from app.brain.events import BookingCreated, DraftCreated, Event, HandoffStarted, MediaReceived
-from app.brain.guardrails import build_facts, disclosure_needed, find_violations, strip_intro
+from app.brain.guardrails import (
+    build_facts,
+    disclosure_needed,
+    find_violations,
+    mentions_health,
+    promises_handoff,
+    strip_intro,
+)
 from app.brain.handoff import eta_text, in_owner_hours, start_handoff
 from app.brain.i18n import day_label, hhmm
 from app.brain.ingest import supersede_drafts
@@ -400,7 +407,12 @@ async def _model_turn(st: _State, new: list[Message]) -> Turn:
     public = public_studio_data(st.cfg, today)
     booking_lines, slot_lines, offered_times = await _context_lines(st)
     system = build_system_prompt(
-        st.cfg, public, now=st.now, client_bookings=booking_lines, offered_slots=slot_lines
+        st.cfg,
+        public,
+        now=st.now,
+        client_bookings=booking_lines,
+        offered_slots=slot_lines,
+        reply_language=st.lang,
     )
     messages = [ChatMessage("system", system), *await _history(st)]
     tc = TurnContext(
@@ -455,8 +467,15 @@ async def _model_turn(st: _State, new: list[Message]) -> Turn:
     if not turn.text:
         return _merge_meta(_fallback(st, "other", "Модель не дала відповіді."), turn)
 
-    # R2: amounts, times, phones and links must be known; regenerate once, then hand off.
     client_texts = [m.text for m in new if m.text]
+    # R5, R6, R8: the model said a person will answer but did not hand off; make it real.
+    if promises_handoff(turn.text):
+        reason = "medical" if mentions_health(client_texts) else "other"
+        fallback = _fallback(st, reason, "Бот пообіцяв передати діалог людині.")
+        fallback.text = render("handoff", st.lang, eta=eta_text(st.cfg, st.now, st.lang))
+        return _merge_meta(fallback, turn)
+
+    # R2: amounts, times, phones and links must be known; regenerate once, then hand off.
     facts = build_facts(
         st.cfg,
         json.dumps(public, ensure_ascii=False),

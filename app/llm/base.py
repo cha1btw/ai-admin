@@ -19,6 +19,9 @@ class ToolCall:
     name: str
     arguments: dict[str, Any]
     raw_arguments: str = ""
+    # Provider data that must travel back unchanged with the call, e.g. Gemini's
+    # extra_content.google.thought_signature; without it Gemini rejects the next request.
+    extra: dict[str, Any] | None = None
 
 
 @dataclass
