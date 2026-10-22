@@ -246,8 +246,9 @@ async def _plan(app: AppContext, session: Any, conversation_id: int) -> ReplyPla
         return await _finish(st, plan, Turn(render("voice_request", lang), from_template=True))
     if texts:
         conversation.voice_strikes = 0
-    if not texts and not visual:
+    if not texts and not visual and conversation.disclosed_at is not None:
         return ReplyPlan("skipped:noise", events=plan.events)
+    # Only emoji as the very first message: still answer, so the client is not met with silence.
 
     turn = await _model_turn(st, new)
     return await _finish(st, plan, turn)

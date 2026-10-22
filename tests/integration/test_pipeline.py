@@ -413,3 +413,15 @@ async def test_detected_language_is_named_in_the_prompt(app, llm, clock) -> None
     cid = await client_says(app, studio, "Hi! How much is a gel manicure?")
     await process_conversation(app, cid)
     assert "Мова відповіді: англійською" in llm.last_system_prompt
+
+
+async def test_emoji_only_first_message_is_answered(app, llm, clock) -> None:
+    studio = await make_studio(app)
+    llm.add(say("Чим можемо допомогти?"))
+    cid = await client_says(app, studio, "💅💅💅?")
+    await process_conversation(app, cid)
+    assert sent(app) == [f"{DISCLOSURE} Чим можемо допомогти?"]
+    # Later emoji in the same conversation stay unanswered (no model call, no tokens).
+    cid = await client_says(app, studio, "👍")
+    plan = await process_conversation(app, cid)
+    assert plan.status == "skipped:noise"

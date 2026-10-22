@@ -25,7 +25,7 @@ _PHONE = re.compile(r"\+?\d[\d \-()]{7,}\d")
 _URL = re.compile(r"https?://[^\s)\]>\"']+", re.IGNORECASE)
 
 _GREETING = re.compile(
-    r"^\s*(добр(?:ий|ого|ої)\s+(?:день|вечір|вечора|ранок|ранку)|вітаю|привіт(?:ик)?|"
+    r"^\s*(добр(?:ий|ого|ої)\s+(?:день|дня|вечір|вечора|ранок|ранку)|вітаю|привіт(?:ик)?|"
     r"здравствуйте|добр(?:ый|ое|ого)\s+(?:день|вечер|утро|утра)|привет|hello|hi|hey|"
     r"good\s+(?:morning|afternoon|evening)|dzień\s+dobry|cześć|witam)\s*[!,.]*\s*",
     re.IGNORECASE,
@@ -43,6 +43,7 @@ class GuardFacts:
     times: set[str] = field(default_factory=set)  # "HH:MM"
     phones: set[str] = field(default_factory=set)  # last 9 digits
     urls: set[str] = field(default_factory=set)
+    currency: str = "UAH"
 
 
 def amounts_in(text: str) -> list[int]:
@@ -74,7 +75,7 @@ def build_facts(
     extra_texts: list[str],
 ) -> GuardFacts:
     """Collect what the reply may mention. extra_texts: recent client messages and tool results."""
-    facts = GuardFacts()
+    facts = GuardFacts(currency=cfg.currency)
     fixed_like: list[int] = []
     for service in cfg.services:
         for amount in (service.price_min, service.price_max, cfg.prepayment_for(service)):
@@ -119,11 +120,26 @@ def build_facts(
     return facts
 
 
+# Prices must stay in the studio's currency: a model answering in Polish once wrote "1100 zł".
+_CURRENCIES = {
+    "UAH": re.compile(r"грн|гривен|гривн|₴|\bUAH\b|hryvn", re.IGNORECASE),
+    "PLN": re.compile(r"\bzł|złot|\bPLN\b|злот", re.IGNORECASE),
+    "EUR": re.compile(r"€|\bEUR\b|євро|евро|\beuros?\b", re.IGNORECASE),
+    "USD": re.compile(r"\$|\bUSD\b|долар|доллар|\bdollars?\b", re.IGNORECASE),
+    "RUB": re.compile(r"₽|\bруб|\bRUB\b", re.IGNORECASE),
+}
+
+
+def currencies_in(text: str) -> set[str]:
+    return {code for code, pattern in _CURRENCIES.items() if pattern.search(text)}
+
+
 def find_violations(text: str, facts: GuardFacts) -> list[str]:
     problems = [f"сума {a}" for a in amounts_in(text) if a not in facts.amounts]
     problems += [f"час {t}" for t in times_in(text) if t not in facts.times]
     problems += [f"телефон …{p[-4:]}" for p in phones_in(text) if p not in facts.phones]
     problems += [f"посилання {u}" for u in urls_in(text) if u not in facts.urls]
+    problems += [f"валюта {c}" for c in sorted(currencies_in(text) - {facts.currency})]
     return problems
 
 

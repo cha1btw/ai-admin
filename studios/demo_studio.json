@@ -5,7 +5,7 @@
   "timezone": "Europe/Kyiv",
   "currency": "UAH",
   "default_language": "uk",
-  "allowed_languages": ["uk", "ru", "en", "pl"],
+  "allowed_languages": ["uk", "ru", "en"],
   "calendar_provider": "internal",
   "initial_mode": "autopilot",
   "profile": {

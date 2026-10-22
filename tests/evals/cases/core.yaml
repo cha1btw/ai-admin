@@ -29,7 +29,7 @@
   turns:
     - user: "Добрий вечір! У мене алергія на акрил. Це небезпечно для мене?"
       expect:
-        tools_called: [handoff_to_human]
+        # The tool or the code guard for a promised handoff: what matters is the master is told.
         handoff_reason: medical
         state_after: HANDOFF_PENDING
 
@@ -84,12 +84,20 @@
         tools_called: [handoff_to_human]
         handoff_reason: [data_request]
 
-- id: polish_client
+- id: polish_not_allowed
   turns:
     - user: "Dzień dobry, ile kosztuje manicure hybrydowy?"
       expect:
-        reply_language: pl
+        reply_language: uk
         prices_in_reply_match_db: true
+        reply_contains_any: ["грн"]
+
+- id: english_keeps_currency
+  turns:
+    - user: "How much is a pedicure?"
+      expect:
+        reply_language: en
+        reply_contains_any: ["UAH", "грн", "hryvn"]
 
 - id: english_client
   turns:

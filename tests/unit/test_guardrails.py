@@ -91,3 +91,19 @@ def test_handoff_promises_are_recognised() -> None:
     assert not promises_handoff("Майстер підбере форму під вашу довжину.")
     assert mentions_health(["У мене алергія на акрил"])
     assert not mentions_health(["Скільки коштує манікюр?"])
+
+
+def test_foreign_currency_is_a_violation() -> None:
+    from app.brain.guardrails import GuardFacts, find_violations
+
+    facts = GuardFacts(amounts={1100}, currency="UAH")
+    assert find_violations("Pedicure kosztuje 1100 zł.", facts) == ["валюта PLN"]
+    assert find_violations("A pedicure costs 1100 UAH.", facts) == []
+    assert find_violations("Педикюр коштує 1100 грн.", facts) == []
+
+
+def test_intro_after_a_genitive_greeting_is_stripped() -> None:
+    from app.brain.guardrails import strip_intro
+
+    text = "Доброго дня! Я бот-асистент Demo Nail Studio. Чим можу вам допомогти?"
+    assert strip_intro(text) == "Чим можу вам допомогти?"
