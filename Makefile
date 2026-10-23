@@ -25,7 +25,7 @@ run: migrate ## API with auto-reload on :8000
 admin: ## Login link to the admin panel (open it while `make run` is running)
 	uv run python -m app.cli admin link
 
-sites: ## Rebuild the landing and admin demo, push to the public repo cha1btw/ai-admin-sites
+sites: ## Rebuild the landing, push to the public repo cha1btw/ai-admin-sites
 	uv run python scripts/build_sites.py
 	cd dist/sites && $(GIT) add -A && ($(GIT) diff --cached --quiet || $(GIT) commit -qm "Update sites") && $(GIT) push -q origin main
 
