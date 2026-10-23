@@ -99,8 +99,8 @@ BOOKING_ERRORS = {
 }
 HELP = (
     "❓ Допомога\n"
-    "Усе основне є в кнопках під полем вводу та в меню (/menu). Команди, якщо зручніше "
-    "писати:\n\n"
+    "Усе основне є в кнопках під полем вводу (якщо їх немає, натисніть /start). "
+    "Команди, якщо зручніше писати:\n\n"
     "Щодня\n"
     "/today — записи на сьогодні\n"
     "/stats — статистика за 7 днів (/stats 30 — за 30)\n\n"
@@ -123,7 +123,6 @@ ADMIN_HELP = (
     "/health — стан системи\n/pause_all, /resume_all — усі студії\n/forget <client_id> — видалити "
     "дані клієнтки"
 )
-MENU_ROW = [Button("🏠 Меню", "menu:home")]
 RESUMED = "▶️ Бот знову працює."
 
 
@@ -139,6 +138,7 @@ class Result:
     replace: bool = False
     note: str | None = None
     toast: str | None = None
+    show_menu: bool = False  # pin the keyboard under the input field (after linking)
 
 
 async def finish(app: AppContext, result: Result) -> Result:
@@ -304,16 +304,11 @@ async def link_account(
         mode = MODE_LABELS.get(tenant.mode, tenant.mode)
         return Result(
             f"Вітаю! Ви підключені до студії «{tenant.name}».\n\n"
-            "Почніть із трьох кроків:\n"
-            "1. Перевірте, що знає бот про студію.\n"
-            "2. Напишіть боту як клієнтка в пісочниці.\n"
-            f"3. Оберіть режим роботи (зараз: {mode}).",
-            buttons=[
-                [Button("📋 Що знає бот", "menu:data")],
-                [Button("🧪 Спробувати як клієнтка", "menu:sandbox")],
-                [Button("⚙️ Режим роботи", "menu:mode")],
-                MENU_ROW,
-            ],
+            "Почніть із трьох кроків, усе є в кнопках під полем вводу:\n"
+            "1. «📋 Що знає бот»: перевірте дані про студію.\n"
+            "2. «🧪 Пісочниця»: напишіть боту як клієнтка.\n"
+            f"3. «⚙️ Режим»: оберіть, як бот відповідає (зараз: {mode}).",
+            show_menu=True,
         )
 
 
@@ -865,7 +860,7 @@ def mode_keyboard(current: str) -> Keyboard:
     return [
         [Button(("✓ " if mode == current else "") + label, f"m:{mode}")]
         for mode, label in MODE_LABELS.items()
-    ] + [MENU_ROW]
+    ]
 
 
 async def show_mode(app: AppContext, telegram_id: int) -> Result:
@@ -901,8 +896,8 @@ async def pause(app: AppContext, telegram_id: int) -> Result:
         tenant.status = "paused"
         _audit(app, session, tenant.id, telegram_id, "tenant.paused")
         return Result(
-            "⏸ Бот на паузі: клієнткам нічого не надсилає, повідомлення зберігаються.",
-            buttons=[[Button("▶️ Увімкнути бота", "menu:resume")]],
+            "⏸ Бот на паузі: клієнткам нічого не надсилає, повідомлення зберігаються. "
+            "Щоб увімкнути, натисніть «▶️ Увімкнути бота»."
         )
 
 
@@ -934,7 +929,7 @@ async def resume(app: AppContext, telegram_id: int) -> Result:
         if waiting
         else ""
     )
-    return Result(RESUMED + tail, buttons=[MENU_ROW])
+    return Result(RESUMED + tail)
 
 
 NOT_LINKED = "Ваш акаунт ще не підключений до студії. Попросіть у нас посилання для підключення."
@@ -943,22 +938,8 @@ NOT_LINKED = "Ваш акаунт ще не підключений до студ
 # --- home screen ---------------------------------------------------------------------------
 
 
-def home_keyboard(paused: bool) -> Keyboard:
-    pause_button = (
-        Button("▶️ Увімкнути бота", "menu:resume")
-        if paused
-        else Button("⏸ Зупинити бота", "menu:pause")
-    )
-    return [
-        [Button("📅 Записи сьогодні", "menu:today"), Button("📊 Статистика", "menu:stats")],
-        [Button("⚙️ Режим", "menu:mode"), pause_button],
-        [Button("🧪 Пісочниця", "menu:sandbox"), Button("📋 Що знає бот", "menu:data")],
-        [Button("✏️ Повідомити про зміни", "menu:change"), Button("❓ Допомога", "menu:help")],
-    ]
-
-
 async def home(app: AppContext, telegram_id: int) -> Result:
-    """The main screen: where the studio stands now, and every everyday action as a button."""
+    """Where the studio stands now. The actions are the keyboard under the input field."""
     async with app.session_factory() as session, session.begin():
         tenant = await current_tenant(session, app, telegram_id)
         if tenant is None:
@@ -996,7 +977,7 @@ async def home(app: AppContext, telegram_id: int) -> Result:
         ]
         if waiting:
             lines.append(f"🙋 Чекають вашої відповіді: {waiting}")
-        return Result("\n".join(lines), buttons=home_keyboard(paused))
+        return Result("\n".join(lines))
 
 
 # --- information -------------------------------------------------------------------------
@@ -1044,7 +1025,7 @@ async def show_data(app: AppContext, telegram_id: int) -> Result:
         tenant = await current_tenant(session, app, telegram_id)
         if tenant is None:
             return Result(NOT_LINKED)
-        return Result(data_text(studio_config(tenant)), buttons=[MENU_ROW])
+        return Result(data_text(studio_config(tenant)))
 
 
 async def show_stats(app: AppContext, telegram_id: int, days: int) -> Result:
@@ -1052,7 +1033,7 @@ async def show_stats(app: AppContext, telegram_id: int, days: int) -> Result:
         tenant = await current_tenant(session, app, telegram_id)
     if tenant is None:
         return Result(NOT_LINKED)
-    return Result(await stats_text(app, tenant, max(1, min(days, 365))), buttons=[MENU_ROW])
+    return Result(await stats_text(app, tenant, max(1, min(days, 365))))
 
 
 async def today_text(app: AppContext, telegram_id: int) -> Result:
@@ -1088,7 +1069,7 @@ async def today_text(app: AppContext, telegram_id: int) -> Result:
             )
         if not rows:
             lines.append("немає")
-        return Result("\n".join(lines), buttons=[MENU_ROW])
+        return Result("\n".join(lines))
 
 
 async def close_days(
@@ -1196,7 +1177,7 @@ async def stop_sandbox(app: AppContext, telegram_id: int) -> Result:
     async with app.session_factory() as session, session.begin():
         account = await ensure_owner(session, telegram_id, None)
         set_state(account, sandbox_tenant=None)
-    return Result("Пісочницю закрито.", buttons=[MENU_ROW])
+    return Result("Пісочницю закрито.")
 
 
 async def sandbox_message(
@@ -1244,8 +1225,8 @@ async def handle_text(app: AppContext, telegram_id: int, text: str) -> Result | 
         )
         return None
     return Result(
-        "Не вдалося розпізнати повідомлення. Оберіть дію в меню або напишіть /help.",
-        buttons=[MENU_ROW],
+        "Не вдалося розпізнати повідомлення. Оберіть дію кнопкою під полем вводу "
+        "або напишіть /help."
     )
 
 

@@ -196,6 +196,7 @@ async def test_link_account_once(app) -> None:
     token = await actions.create_link(app, "demo_studio")
     result = await actions.link_account(app, token, 555, "Олена")
     assert "Вітаю! Ви підключені до студії «Demo Nail Studio»" in result.text
+    assert result.show_menu and result.buttons is None
     again = await actions.link_account(app, token, 556, "Хтось")
     assert "недійсне" in again.text
     async with app.session_factory() as session:
@@ -390,27 +391,14 @@ async def test_sandbox_shows_typing(app, llm) -> None:
     assert len(shown) >= 1 and app.channels["sandbox"].texts()
 
 
-async def test_home_screen_shows_status_and_buttons(app) -> None:
+async def test_status_screen_follows_pause(app) -> None:
     await make_studio(app)
     home = await actions.home(app, OWNER_TG)
     assert home.text.startswith("🏠 Demo Nail Studio") and "🟢 Бот працює" in home.text
     assert "Записів через бота сьогодні: 0" in home.text
-    data = [b.data for row in home.buttons for b in row]
-    assert data == [
-        "menu:today",
-        "menu:stats",
-        "menu:mode",
-        "menu:pause",
-        "menu:sandbox",
-        "menu:data",
-        "menu:change",
-        "menu:help",
-    ]
+    assert home.buttons is None  # the actions are the keyboard under the input field
     await actions.pause(app, OWNER_TG)
-    paused = await actions.home(app, OWNER_TG)
-    assert "⏸ Бот на паузі" in paused.text and "menu:resume" in [
-        b.data for row in paused.buttons for b in row
-    ]
+    assert "⏸ Бот на паузі" in (await actions.home(app, OWNER_TG)).text
     assert (await actions.home(app, 777)).text == actions.NOT_LINKED
 
 
@@ -471,7 +459,9 @@ async def test_keyboard_labels_match_handlers() -> None:
     from app.owner.bot import MENU_BUTTONS
     from app.owner.notifier import MENU_LABELS
 
-    assert {label for row in MENU_LABELS for label in row} == set(MENU_BUTTONS)
+    labels = {label for row in MENU_LABELS for label in row}
+    assert labels <= set(MENU_BUTTONS)
+    assert set(MENU_BUTTONS) - labels == {"🏠 Меню"}  # old keyboard version, kept working
 
 
 async def test_start_pins_the_menu_keyboard_then_shows_home(app) -> None:
@@ -494,10 +484,28 @@ async def test_keyboard_button_runs_the_action_even_in_the_sandbox(app) -> None:
     await actions.start_sandbox(app, OWNER_TG)
     await bot.on_menu_button(_tg_message("📅 Сьогодні"), app)
     assert app.notifier.sent[-1].text.startswith("Записи через бота на")
-    await bot.on_menu_button(_tg_message("🏠 Меню"), app)
+    await bot.on_menu_button(_tg_message("📌 Стан"), app)
     assert app.notifier.sent[-1].text.startswith("🏠 Demo Nail Studio")
     async with app.session_factory() as session:  # nothing went to the bot as a client's text
         assert await session.scalar(select(func.count()).select_from(Message)) == 0
+
+
+async def test_every_keyboard_button_answers(app) -> None:
+    from app.owner import bot
+    from app.owner.notifier import MENU_LABELS
+
+    await make_studio(app)
+    for label in [label for row in MENU_LABELS for label in row]:
+        before = len(app.notifier.sent)
+        await bot.on_menu_button(_tg_message(label), app)
+        assert len(app.notifier.sent) == before + 1, label
+    texts = app.notifier.texts()
+    assert any(t.startswith("Що знає бот") for t in texts)
+    assert any(t.startswith("⏸ Бот на паузі") for t in texts)
+    assert any(t.startswith("▶️ Бот знову працює") for t in texts)
+    assert any("що змінилося" in t for t in texts)  # the /change prompt
+    async with app.session_factory() as session:
+        assert (await session.get(OwnerAccount, OWNER_TG)).state["awaiting"]["kind"] == "change"
 
 
 async def test_stats_text(app, llm, clock) -> None:

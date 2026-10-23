@@ -14,7 +14,7 @@ from app.owner import actions
 from app.owner.actions import Result
 from app.owner.notifier import Button
 
-MENU_HINT = "👇 Кнопки меню з'явилися під полем вводу. Головний екран: «🏠 Меню»."
+MENU_HINT = "👇 Кнопки меню з'явилися під полем вводу."
 
 
 async def send_result(app: AppContext, chat_id: int, result: Result | None) -> None:
@@ -83,7 +83,7 @@ async def start_with_token(message: Message, command: CommandObject, app: AppCon
     result = await actions.link_account(
         app, command.args or "", message.from_user.id, _name(message)
     )
-    if result.buttons:  # linked: the welcome carries buttons, an error does not
+    if result and result.show_menu:
         await app.notifier.show_menu(message.chat.id, MENU_HINT)
     await send_result(app, message.chat.id, result)
 
@@ -114,9 +114,7 @@ async def help_command(message: Message, app: AppContext) -> None:
     text = (f"Студія: {tenant.name}\n\n" if tenant else "") + actions.HELP
     if actions.is_admin(app, user):
         text += "\n\n" + actions.ADMIN_HELP
-    await app.notifier.send(
-        message.chat.id, text, buttons=[actions.MENU_ROW] if tenant is not None else None
-    )
+    await app.notifier.send(message.chat.id, text)
 
 
 async def mode(message: Message, app: AppContext) -> None:
@@ -289,8 +287,8 @@ async def on_button(query: CallbackQuery, app: AppContext) -> None:
     action, _, ident = rest.partition(":")
     result: Result | None = None
     try:
-        if kind == "menu":
-            await on_menu(query, app, rest)
+        if kind == "menu":  # inline main menu of an older message: it lives under the input now
+            await query.answer("Меню тепер під полем вводу. Якщо його немає, натисніть /start")
             return
         if kind == "sb":
             result = await _sandbox_button(app, user, rest)
@@ -345,45 +343,6 @@ async def _sandbox_button(app: AppContext, user: int, action: str) -> Result:
     raise KeyError(action)
 
 
-async def on_menu(query: CallbackQuery, app: AppContext, action: str) -> None:
-    """Main-screen buttons. "home" redraws the screen in place; the rest answer below it."""
-    user = query.from_user.id
-    handlers = {
-        "home": actions.home,
-        "today": actions.today_text,
-        "mode": actions.show_mode,
-        "pause": actions.pause,
-        "resume": actions.resume,
-        "sandbox": actions.start_sandbox,
-        "data": actions.show_data,
-        "change": actions.start_change_prompt,
-    }
-    if action == "stats":
-        result = await actions.show_stats(app, user, 7)
-    elif action == "help":
-        result = Result(actions.HELP, buttons=[actions.MENU_ROW])
-    elif action in handlers:
-        result = await handlers[action](app, user)
-    else:
-        await query.answer("Невідома дія")
-        return
-    if action == "home":
-        result.replace = True
-    elif action in ("pause", "resume") and query.message is not None:
-        # The home screen shows the status: refresh it, then confirm below.
-        await send_result(app, query.message.chat.id, result)
-        refreshed = await actions.home(app, user)
-        await app.notifier.edit(
-            query.message.chat.id,
-            query.message.message_id,
-            refreshed.text or "",
-            buttons=refreshed.buttons,
-        )
-        await query.answer()
-        return
-    await answer_button(app, query, result)
-
-
 async def _switch(app: AppContext, user: int, tenant_id: int) -> Result:
     async with app.session_factory() as session, session.begin():
         if not await actions.can_manage(session, app, user, tenant_id):
@@ -401,14 +360,25 @@ async def stats_week(message: Message, app: AppContext) -> None:
     await send_result(app, message.chat.id, await actions.show_stats(app, message.from_user.id, 7))
 
 
+async def change_prompt(message: Message, app: AppContext) -> None:
+    result = await actions.start_change(app, message.from_user.id, None)
+    await send_result(app, message.chat.id, result)
+
+
 # Texts of the keyboard under the input field (MENU_LABELS) and what they do. They win over
 # the sandbox, so pressing one never sends it to the bot as a client's message.
 MENU_BUTTONS = {
     "📅 Сьогодні": today,
     "📊 Статистика": stats_week,
-    "🧪 Пісочниця": sandbox,
     "⚙️ Режим": mode,
-    "🏠 Меню": menu,
+    "🧪 Пісочниця": sandbox,
+    "📋 Що знає бот": data,
+    "✏️ Повідомити про зміни": change_prompt,
+    "⏸ Зупинити бота": pause,
+    "▶️ Увімкнути бота": resume,
+    "📌 Стан": menu,
+    "❓ Допомога": help_command,
+    "🏠 Меню": menu,  # label of the first keyboard version, still on masters' screens
 }
 
 
@@ -434,7 +404,7 @@ async def on_text(message: Message, app: AppContext) -> None:
 # The "/" menu masters see in Owner Bot (set by `python -m app.cli telegram set-webhooks`).
 # Founders' commands stay out of it: they are in /help for founders only.
 MENU = [
-    ("menu", "Головне меню"),
+    ("menu", "Стан студії"),
     ("today", "Записи на сьогодні"),
     ("mode", "Режим роботи бота"),
     ("pause", "Зупинити бота"),
