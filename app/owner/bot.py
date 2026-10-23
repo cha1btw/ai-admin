@@ -14,6 +14,8 @@ from app.owner import actions
 from app.owner.actions import Result
 from app.owner.notifier import Button
 
+MENU_HINT = "👇 Кнопки меню з'явилися під полем вводу. Головний екран: «🏠 Меню»."
+
 
 async def send_result(app: AppContext, chat_id: int, result: Result | None) -> None:
     if result is None:
@@ -81,6 +83,8 @@ async def start_with_token(message: Message, command: CommandObject, app: AppCon
     result = await actions.link_account(
         app, command.args or "", message.from_user.id, _name(message)
     )
+    if result.buttons:  # linked: the welcome carries buttons, an error does not
+        await app.notifier.show_menu(message.chat.id, MENU_HINT)
     await send_result(app, message.chat.id, result)
 
 
@@ -91,6 +95,7 @@ async def start(message: Message, app: AppContext) -> None:
     if tenant is None:
         await help_command(message, app)
         return
+    await app.notifier.show_menu(message.chat.id, MENU_HINT)
     await send_result(app, message.chat.id, await actions.home(app, user))
 
 
@@ -392,6 +397,25 @@ async def _switch(app: AppContext, user: int, tenant_id: int) -> Result:
 # --- plain messages ------------------------------------------------------------------------
 
 
+async def stats_week(message: Message, app: AppContext) -> None:
+    await send_result(app, message.chat.id, await actions.show_stats(app, message.from_user.id, 7))
+
+
+# Texts of the keyboard under the input field (MENU_LABELS) and what they do. They win over
+# the sandbox, so pressing one never sends it to the bot as a client's message.
+MENU_BUTTONS = {
+    "📅 Сьогодні": today,
+    "📊 Статистика": stats_week,
+    "🧪 Пісочниця": sandbox,
+    "⚙️ Режим": mode,
+    "🏠 Меню": menu,
+}
+
+
+async def on_menu_button(message: Message, app: AppContext) -> None:
+    await MENU_BUTTONS[message.text](message, app)
+
+
 async def on_text(message: Message, app: AppContext) -> None:
     user = message.from_user.id
     async with app.session_factory() as session:
@@ -462,6 +486,7 @@ def build_owner_dispatcher() -> Dispatcher:
     commands.message.register(resume_all, Command("resume_all"))
     commands.message.register(forget, Command("forget"))
     callbacks.callback_query.register(on_button)
+    texts.message.register(on_menu_button, F.text.in_(set(MENU_BUTTONS)))
     texts.message.register(on_text)
     dispatcher = Dispatcher()
     dispatcher.include_routers(business_router, commands, callbacks, texts)

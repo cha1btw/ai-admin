@@ -459,6 +459,47 @@ async def test_buttons_edit_in_place(app) -> None:
     assert app.notifier.texts() == ["Готово."]
 
 
+def _tg_message(text: str, user: int = OWNER_TG):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        text=text, chat=SimpleNamespace(id=user), from_user=SimpleNamespace(id=user)
+    )
+
+
+async def test_keyboard_labels_match_handlers() -> None:
+    from app.owner.bot import MENU_BUTTONS
+    from app.owner.notifier import MENU_LABELS
+
+    assert {label for row in MENU_LABELS for label in row} == set(MENU_BUTTONS)
+
+
+async def test_start_pins_the_menu_keyboard_then_shows_home(app) -> None:
+    from app.owner import bot
+
+    await make_studio(app)
+    await bot.start(_tg_message("/start"), app)
+    assert app.notifier.menu_shown == [OWNER_TG]
+    assert app.notifier.sent[0].text.startswith("👇 Кнопки меню")
+    assert app.notifier.sent[1].text.startswith("🏠 Demo Nail Studio")
+    # Someone who is not linked gets no keyboard, only the instructions with their id.
+    await bot.start(_tg_message("/start", user=555), app)
+    assert app.notifier.menu_shown == [OWNER_TG]
+
+
+async def test_keyboard_button_runs_the_action_even_in_the_sandbox(app) -> None:
+    from app.owner import bot
+
+    await make_studio(app)
+    await actions.start_sandbox(app, OWNER_TG)
+    await bot.on_menu_button(_tg_message("📅 Сьогодні"), app)
+    assert app.notifier.sent[-1].text.startswith("Записи через бота на")
+    await bot.on_menu_button(_tg_message("🏠 Меню"), app)
+    assert app.notifier.sent[-1].text.startswith("🏠 Demo Nail Studio")
+    async with app.session_factory() as session:  # nothing went to the bot as a client's text
+        assert await session.scalar(select(func.count()).select_from(Message)) == 0
+
+
 async def test_stats_text(app, llm, clock) -> None:
     studio = await make_studio(app)
     llm.add(
