@@ -22,9 +22,10 @@ from app.brain.language import choose_language
 from app.brain.orchestrator import Outgoing
 from app.brain.templates import render
 from app.channels.accounts import ensure_account
+from app.channels.base import show_typing
 from app.context import AppContext
 from app.core.logging import get_logger
-from app.db.models import ChannelAccount, Message, Tenant, TenantMember
+from app.db.models import ChannelAccount, Conversation, Message, Tenant, TenantMember
 from app.owner.actions import ensure_owner, set_state
 from app.owner.notifications import deliver
 from app.tenants.loader import studio_config
@@ -288,10 +289,15 @@ async def on_demo_message(app: AppContext, message: TgMessage) -> None:
         if found is None:
             return
         account, _ = found
-        await record_client_message(
+        inbound = to_inbound(message)
+        stored = await record_client_message(
             session,
             account,
-            to_inbound(message),
+            inbound,
             app.clock.now(),
             debounce=timedelta(seconds=app.settings.debounce_seconds),
         )
+        if stored is None:
+            return
+        conversation = await session.get(Conversation, stored.conversation_id)
+    await show_typing(app.channels, account, conversation, inbound.external_user_id)

@@ -328,6 +328,63 @@ async def test_sandbox_flow(app, llm) -> None:
     assert stopped.text == "Пісочницю закрито."
 
 
+async def _sandbox_turn(app, text: str) -> int:
+    """The master writes in the sandbox and the reply is due at once."""
+    await actions.handle_text(app, OWNER_TG, text)
+    async with app.session_factory() as session, session.begin():
+        row = (await session.scalars(select(Conversation))).one()
+        row.reply_due_at = app.clock.now()
+    await process_conversation(app, row.id)
+    return row.id
+
+
+async def test_sandbox_explains_handoff_and_keeps_answering(app, llm) -> None:
+    await make_studio(app)
+    await actions.start_sandbox(app, OWNER_TG)
+    llm.add(call("handoff_to_human", reason="complaint", summary="Тестова скарга"))
+    cid = await _sandbox_turn(app, "Хочу поскаржитися")
+    assert app.channels["sandbox"].texts()  # the client template, as in a real chat
+    [note] = app.notifier.sent  # only the note in the master's own chat, no notification
+    assert note.chat_id == OWNER_TG and note.text.startswith("🙋 Тут бот передав би діалог")
+    assert "скарга" in note.text
+    assert [b.data for b in note.buttons[0]] == ["sb:restart", "sb:stop"]
+    async with app.session_factory() as session:
+        assert (await session.get(Conversation, cid)).state == "BOT_ACTIVE"
+    llm.add(say("Чим ще можу допомогти?"))
+    await _sandbox_turn(app, "А ще питання")
+    assert app.channels["sandbox"].texts()[-1].endswith("Чим ще можу допомогти?")
+
+
+async def test_sandbox_works_while_paused(app, llm) -> None:
+    await make_studio(app)
+    await actions.pause(app, OWNER_TG)
+    await actions.start_sandbox(app, OWNER_TG)
+    llm.add(say("Манікюр з гель-лаком коштує 900 грн."))
+    await _sandbox_turn(app, "Скільки коштує манікюр?")
+    assert app.channels["sandbox"].texts()[-1].endswith("900 грн.")
+
+
+async def test_sandbox_shows_typing(app, llm) -> None:
+    from app.worker.main import process_due_replies
+
+    shown: list[str] = []
+
+    async def typing(account, recipient_id: str) -> None:
+        shown.append(recipient_id)
+
+    app.channels["sandbox"].typing = typing
+    await make_studio(app)
+    await actions.start_sandbox(app, OWNER_TG)
+    await actions.handle_text(app, OWNER_TG, "Привіт")
+    assert shown == [str(OWNER_TG)]  # right away, before the reply is due
+    llm.add(say("Вітаю! Чим допомогти?"))
+    async with app.session_factory() as session, session.begin():
+        row = (await session.scalars(select(Conversation))).one()
+        row.reply_due_at = app.clock.now()
+    assert await process_due_replies(app) == 1
+    assert len(shown) >= 1 and app.channels["sandbox"].texts()
+
+
 async def test_stats_text(app, llm, clock) -> None:
     studio = await make_studio(app)
     llm.add(

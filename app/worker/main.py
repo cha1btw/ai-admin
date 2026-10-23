@@ -12,10 +12,11 @@ from aiogram.types import Update
 from sqlalchemy import Interval, func, or_, select
 
 from app.brain.orchestrator import process_conversation
+from app.channels.base import show_typing
 from app.config import get_settings
 from app.context import AppContext
 from app.core.logging import configure_logging, get_logger
-from app.db.models import Conversation, InboundEvent
+from app.db.models import ChannelAccount, Client, Conversation, InboundEvent, Tenant
 from app.db.session import make_engine, make_session_factory
 from app.runtime import Bots, build_bots, build_context
 from app.worker.jobs import Scheduler
@@ -24,6 +25,7 @@ log = get_logger(__name__)
 
 MAX_ATTEMPTS = 5
 RETRY_SECONDS = 30
+TYPING_REFRESH_S = 4  # Telegram shows "typing…" for 5 seconds per call
 
 
 def _backoff(attempts):
@@ -101,8 +103,31 @@ async def process_due_replies(app: AppContext, limit: int = 10) -> int:
             )
         )
     for conversation_id in ids:
-        await process_conversation(app, conversation_id)
+        typing = asyncio.create_task(keep_typing(app, conversation_id))
+        try:
+            await process_conversation(app, conversation_id)
+        finally:
+            typing.cancel()
     return len(ids)
+
+
+async def keep_typing(app: AppContext, conversation_id: int) -> None:
+    """The model may take tens of seconds; "typing…" shows the client the bot is not stuck."""
+    try:
+        async with app.session_factory() as session:
+            conversation = await session.get(Conversation, conversation_id)
+            account = await session.get(ChannelAccount, conversation.channel_account_id)
+            client = await session.get(Client, conversation.client_id)
+            tenant = await session.get(Tenant, conversation.tenant_id)
+        if tenant.status == "paused" and account.kind != "sandbox":
+            return
+        while True:
+            await show_typing(app.channels, account, conversation, client.external_user_id)
+            await asyncio.sleep(TYPING_REFRESH_S)
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        log.warning("typing.failed", conversation_id=conversation_id)
 
 
 async def run(app: AppContext, bots: Bots, stop: asyncio.Event) -> None:

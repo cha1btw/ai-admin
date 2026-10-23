@@ -74,7 +74,8 @@ MEDIA_LABELS = {
     "file": "[файл]",
 }
 _PHONE_WORDS = re.compile(r"телефон|номер|phone|telefon", re.IGNORECASE)
-_WORDLESS = re.compile(r"^[\W\d_]*$")
+# Emoji and punctuation only. Digits count as content: "14:00" picks a time.
+_WORDLESS = re.compile(r"^[\W_]*$")
 CORRECTION = (
     "Відповідь містила дані, яких немає в ДАНІ чи в результатах інструментів: {problems}. "
     "Напиши відповідь ще раз, використовуючи тільки ДАНІ та результати інструментів."
@@ -187,7 +188,8 @@ async def _plan(app: AppContext, session: Any, conversation_id: int) -> ReplyPla
         client.language = detected
     lang = choose_language(detected, client.language, cfg.allowed_languages, cfg.default_language)
 
-    if tenant.status == "paused":
+    # The Owner Bot sandbox is a test: it works while the bot is paused for clients.
+    if tenant.status == "paused" and account.kind != "sandbox":
         return ReplyPlan("skipped:paused")
     if conversation.state == "HUMAN_ACTIVE":
         return ReplyPlan("skipped:human")
@@ -462,7 +464,10 @@ async def _model_turn(st: _State, new: list[Message]) -> Turn:
             "llm_failed", f"Модель недоступна ({type(exc).__name__}); бот відповідає шаблоном."
         )
         return _merge_meta(
-            _fallback(st, "other", "Модель недоступна, клієнтці надіслано шаблон."), turn
+            _fallback(
+                st, "other", "Модель не відповіла (ліміт запитів або таймаут), надіслано шаблон."
+            ),
+            turn,
         )
 
     if not turn.text:
@@ -573,7 +578,11 @@ async def _finish(st: _State, plan: ReplyPlan, turn: Turn) -> ReplyPlan:
     conversation.last_bot_message_at = st.now
     if turn.handoff is not None:
         reason, summary = turn.handoff
-        start_handoff(conversation, reason, st.now)
+        # The Owner Bot sandbox only tells the master that a handoff would happen and keeps
+        # talking; otherwise one handoff would silence the test chat (the admin test chat
+        # still checks the real state).
+        if st.account.kind != "sandbox":
+            start_handoff(conversation, reason, st.now)
         st.session.add(
             AuditLog(
                 tenant_id=st.tenant.id,

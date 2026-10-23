@@ -29,6 +29,18 @@ class OutboundChannel(Protocol):
 ChannelRegistry = dict[str, OutboundChannel]
 
 
+async def show_typing(
+    channels: ChannelRegistry, account: ChannelAccount, conversation: Conversation, recipient: str
+) -> None:
+    """Show "typing…" while the bot prepares a reply. Optional: only channels that define
+    `typing(account, recipient_id)` support it (the demo bot and the Owner Bot sandbox)."""
+    if conversation.state != "BOT_ACTIVE":
+        return
+    typing = getattr(channels.get(account.kind), "typing", None)
+    if typing is not None:
+        await typing(account, recipient)
+
+
 def window_open(channel: OutboundChannel, conversation: Conversation, now: datetime) -> bool:
     """R11: Telegram Business and Instagram allow replies only within 24 hours of the client's
     last message."""

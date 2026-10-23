@@ -336,15 +336,9 @@ async def test_privacy_notice_once_when_phone_is_asked(app, llm) -> None:
     assert "privacy" not in sent(app)[1]
 
 
-async def test_sandbox_never_notifies(app, llm) -> None:
+async def test_sandbox_never_notifies_members(app, llm) -> None:
+    """Sandbox conversations (here the admin test chat kind) send no notifications."""
     studio = await make_studio(app, kind="sandbox")
-    async with app.session_factory() as session, session.begin():
-        account = await session.get(ChannelAccount, studio.account_id)
-        from app.brain.ingest import get_or_create_conversation
-
-        _, conv = await get_or_create_conversation(
-            session, account, str(OWNER_TG), app.clock.now(), sandbox=True
-        )
     llm.add(call("handoff_to_human", reason="complaint", summary="Тестова скарга"))
     from datetime import timedelta
 
@@ -352,7 +346,9 @@ async def test_sandbox_never_notifies(app, llm) -> None:
 
     async with app.session_factory() as session, session.begin():
         account = await session.get(ChannelAccount, studio.account_id)
-        await record_client_message(
+        account.kind = "admin_test"  # not the Owner Bot sandbox: no note to anyone
+        app.channels["admin_test"] = app.channels["sandbox"]
+        message = await record_client_message(
             session,
             account,
             Inbound(str(OWNER_TG), None, "Хочу поскаржитися"),
@@ -360,9 +356,25 @@ async def test_sandbox_never_notifies(app, llm) -> None:
             debounce=timedelta(0),
             sandbox=True,
         )
-    await process_conversation(app, conv.id)
+    await process_conversation(app, message.conversation_id)
     assert app.channels["sandbox"].texts()
     assert app.notifier.sent == []
+    # The admin test chat still sees the real state for its automatic check.
+    assert (await conversation(app, message.conversation_id)).state == "HANDOFF_PENDING"
+
+
+async def test_digits_only_reply_is_answered(app, llm) -> None:
+    """ "14:00" picks a time: it is content, not noise like a lone emoji."""
+    studio = await make_studio(app)
+    llm.add(say("На яку годину вам зручно?"), say("Добре, 14:00."))
+    cid = await client_says(app, studio, "Хочу на манікюр")
+    await process_conversation(app, cid)
+    await client_says(app, studio, "14:00")
+    plan = await process_conversation(app, cid)
+    assert plan.status == "replied"
+    assert sent(app)[-1] == "Добре, 14:00."
+    await client_says(app, studio, "👍")
+    assert (await process_conversation(app, cid)).status == "skipped:noise"
 
 
 def test_demo_config_has_landing_faq() -> None:

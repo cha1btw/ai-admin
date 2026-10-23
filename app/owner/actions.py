@@ -43,7 +43,7 @@ from app.brain.replies import (
 )
 from app.brain.templates import render
 from app.channels.accounts import ensure_account
-from app.channels.base import window_open
+from app.channels.base import show_typing, window_open
 from app.context import AppContext
 from app.db.models import (
     ACTIVE_BOOKING_STATUSES,
@@ -1056,7 +1056,7 @@ async def sandbox_message(
 ) -> None:
     async with app.session_factory() as session, session.begin():
         channel = await ensure_account(session, tenant_id, "sandbox", f"sandbox-{tenant_id}")
-        await record_client_message(
+        stored = await record_client_message(
             session,
             channel,
             inbound,
@@ -1064,6 +1064,10 @@ async def sandbox_message(
             debounce=timedelta(seconds=app.settings.debounce_seconds),
             sandbox=True,
         )
+        if stored is None:
+            return
+        conversation = await session.get(Conversation, stored.conversation_id)
+    await show_typing(app.channels, channel, conversation, inbound.external_user_id)
 
 
 # --- text router ---------------------------------------------------------------------------

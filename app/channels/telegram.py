@@ -4,6 +4,7 @@ Owner Bot is one bot that masters talk to and also connect to their accounts as 
 bot; the demo bot is a separate public bot of the demo studio.
 """
 
+import contextlib
 from datetime import timedelta
 
 from aiogram import Bot
@@ -47,6 +48,12 @@ async def _send(
     return ids
 
 
+async def _typing(bot: Bot, chat_id: int) -> None:
+    # Cosmetic: a failed chat action must never block the reply.
+    with contextlib.suppress(TelegramAPIError):
+        await bot.send_chat_action(chat_id, "typing")
+
+
 class TelegramDemoChannel:
     """The public demo bot: an ordinary bot, no reply window."""
 
@@ -62,6 +69,9 @@ class TelegramDemoChannel:
         return await _send(
             self.bot, int(recipient_id), split_message(text, max_chars=self.max_chars), None
         )
+
+    async def typing(self, account: ChannelAccount, recipient_id: str) -> None:
+        await _typing(self.bot, int(recipient_id))
 
 
 class TelegramBusinessChannel:
@@ -94,3 +104,6 @@ class SandboxChannel:
     async def send_text(self, account: ChannelAccount, recipient_id: str, text: str) -> list[str]:
         parts = [f"🤖 {part}" for part in split_message(text, max_chars=self.max_chars)]
         return await _send(self.bot, int(recipient_id), parts, None)
+
+    async def typing(self, account: ChannelAccount, recipient_id: str) -> None:
+        await _typing(self.bot, int(recipient_id))

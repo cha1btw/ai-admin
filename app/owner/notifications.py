@@ -1,7 +1,7 @@
 """After-commit side effects: deliver bot replies to clients and tell the master what happened.
 
 Notifications are in Ukrainian and come without sound outside the master's hours. Sandbox
-conversations never notify anyone.
+conversations never notify anyone; the Owner Bot sandbox only explains a handoff in its own chat.
 """
 
 from zoneinfo import ZoneInfo
@@ -56,6 +56,9 @@ ACTION_NOTES = {
     "request_booking": "Після «Відправити» бот створить заявку.",
     "handoff_to_human": "Після «Відправити» діалог перейде до вас, бот замовкне.",
 }
+SANDBOX_KEYBOARD: Keyboard = [
+    [Button("🔄 Почати заново", "sb:restart"), Button("🚪 Вийти", "sb:stop")]
+]
 
 
 # --- delivery to clients -------------------------------------------------------------------
@@ -94,7 +97,13 @@ async def deliver(app: AppContext, outgoing: list) -> list[Event]:
             except ChannelError as exc:
                 message.delivery_status = "failed"
                 await session.commit()
-                log.warning("send.failed", conversation_id=conversation.id, permanent=exc.permanent)
+                # The Telegram/Meta error text names the cause and carries no message text.
+                log.warning(
+                    "send.failed",
+                    conversation_id=conversation.id,
+                    permanent=exc.permanent,
+                    error=str(exc)[:200],
+                )
                 if not exc.permanent:
                     await app.alerts.send(
                         f"send_failed:{account.kind}", f"Не вдається надсилати в {account.kind}."
@@ -259,6 +268,9 @@ async def _request_created(app, session, tenant, cfg, event: RequestCreated) -> 
 async def _handoff(app, session, tenant, cfg, event: HandoffStarted) -> None:
     conversation, client, channel = await _conversation_bits(session, event.conversation_id)
     if conversation.is_sandbox:
+        account = await session.get(ChannelAccount, conversation.channel_account_id)
+        if account.kind == "sandbox":
+            await _sandbox_handoff_note(app, int(client.external_user_id), event)
         return
     last = await last_client_text(session, conversation.id)
     lines = [
@@ -288,6 +300,21 @@ async def _handoff(app, session, tenant, cfg, event: HandoffStarted) -> None:
         ],
     ]
     await notify_members(app, session, tenant, cfg, "\n".join(lines), buttons)
+
+
+async def _sandbox_handoff_note(app: AppContext, chat_id: int, event: HandoffStarted) -> None:
+    """In the sandbox the master is the client: say what a real handoff would look like."""
+    lines = [
+        "🙋 Тут бот передав би діалог вам.",
+        f"Причина: {REASON_LABELS.get(event.reason, event.reason)}.",
+    ]
+    if event.summary:
+        lines.append(event.summary)
+    lines.append(
+        "У справжньому діалозі ви отримали б сповіщення, а бот замовк би до вашої відповіді. "
+        "У пісочниці можна писати далі."
+    )
+    await app.notifier.send(chat_id, "\n".join(lines), buttons=SANDBOX_KEYBOARD)
 
 
 def draft_keyboard(draft: Draft) -> Keyboard:
