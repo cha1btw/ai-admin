@@ -1,6 +1,8 @@
 .DEFAULT_GOAL := help
 FILE ?= studios/demo_studio.json
 TENANT ?= demo_studio
+# Apple's git runs on every Mac; an old Intel Homebrew git in PATH may not.
+GIT ?= $(if $(wildcard /usr/bin/git),/usr/bin/git,git)
 
 help: ## Show available targets
 	@grep -E '^[a-z-]+:.*## ' Makefile | awk 'BEGIN {FS = ":.*## "} {printf "  %-16s %s\n", $$1, $$2}'
@@ -25,7 +27,7 @@ admin: ## Login link to the admin panel (open it while `make run` is running)
 
 sites: ## Rebuild the landing and admin demo, push to the public repo cha1btw/ai-admin-sites
 	uv run python scripts/build_sites.py
-	cd dist/sites && git add -A && (git diff --cached --quiet || git commit -qm "Update sites") && git push -q origin main
+	cd dist/sites && $(GIT) add -A && ($(GIT) diff --cached --quiet || $(GIT) commit -qm "Update sites") && $(GIT) push -q origin main
 
 worker: migrate ## Worker: inbound queue, replies, periodic jobs
 	uv run python -m app.worker.main
