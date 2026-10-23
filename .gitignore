@@ -29,3 +29,4 @@ backups/
 
 # Built public sites (scripts/build_sites.py)
 dist/
+.public_url

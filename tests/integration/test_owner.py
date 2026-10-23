@@ -508,6 +508,32 @@ async def test_every_keyboard_button_answers(app) -> None:
         assert (await session.get(OwnerAccount, OWNER_TG)).state["awaiting"]["kind"] == "change"
 
 
+async def test_admin_command_gives_a_link_only_to_founders(app, monkeypatch, tmp_path) -> None:
+    from pydantic import SecretStr
+
+    from app.admin import auth
+    from app.owner import bot
+
+    file = tmp_path / ".public_url"
+    monkeypatch.setattr(auth, "PUBLIC_URL_FILE", file)
+    app.settings = app.settings.model_copy(
+        update={"admin_telegram_ids": [OWNER_TG], "encryption_key": SecretStr("unit-test-key")}
+    )
+    await make_studio(app)
+    await bot.admin_panel(_tg_message("/admin"), app)
+    assert "недоступна ззовні" in app.notifier.sent[-1].text  # no tunnel, no address
+    file.write_text("https://demo.trycloudflare.com")
+    await bot.admin_panel(_tg_message("/admin"), app)
+    assert (
+        app.notifier.sent[-1]
+        .text.splitlines()[1]
+        .startswith("https://demo.trycloudflare.com/admin/login?token=")
+    )
+    sent_before = len(app.notifier.sent)
+    await bot.admin_panel(_tg_message("/admin", user=777), app)  # a master, not a founder
+    assert len(app.notifier.sent) == sent_before
+
+
 async def test_stats_text(app, llm, clock) -> None:
     studio = await make_studio(app)
     llm.add(

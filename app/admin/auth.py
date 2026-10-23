@@ -7,6 +7,7 @@ cross-site request without CORS, so forged form posts fail (CSRF).
 """
 
 import secrets
+from pathlib import Path
 
 from fastapi import HTTPException, Request
 from sqlalchemy.dialects.postgresql import insert
@@ -15,9 +16,23 @@ from app.config import Settings
 from app.core.crypto import CryptoError, sign_state, verify_state
 from app.db.models import JobRun
 
+# `make tunnel` writes the temporary public address here; it changes on every start, so the
+# bot reads the file when it makes a link instead of relying on PUBLIC_BASE_URL.
+PUBLIC_URL_FILE = Path(__file__).resolve().parents[2] / ".public_url"
 COOKIE = "ai_admin_session"
 LOGIN_TTL = 600
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+
+
+def public_base(settings: Settings) -> str | None:
+    """Where the admin panel can be opened from outside: PUBLIC_BASE_URL, else the tunnel."""
+    if settings.public_base_url:
+        return settings.public_base_url.rstrip("/")
+    try:
+        url = PUBLIC_URL_FILE.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    return url.rstrip("/") if url.startswith("https://") else None
 
 
 def login_link(settings: Settings, telegram_id: int, base_url: str | None = None) -> str:
@@ -26,7 +41,7 @@ def login_link(settings: Settings, telegram_id: int, base_url: str | None = None
         {"admin": telegram_id, "purpose": "login", "nonce": secrets.token_urlsafe(12)},
         LOGIN_TTL,
     )
-    base = (base_url or settings.public_base_url or "http://localhost:8000").rstrip("/")
+    base = (base_url or public_base(settings) or "http://localhost:8000").rstrip("/")
     return f"{base}/admin/login?token={token}"
 
 
