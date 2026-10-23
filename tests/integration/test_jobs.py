@@ -263,4 +263,4 @@ async def test_change_request_goes_to_founders(app) -> None:
     assert "Манікюр тепер 950 грн" in sent[0] and "Demo Nail Studio" in sent[0]
     # The next text is not swallowed by the finished /change.
     again = await actions.handle_text(app, OWNER_TG, "привіт")
-    assert again.text.startswith("Не зрозумів")
+    assert again.text.startswith("Не вдалося розпізнати")

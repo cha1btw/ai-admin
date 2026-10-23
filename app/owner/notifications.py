@@ -203,14 +203,14 @@ async def _booking_created(app, session, tenant, cfg, event: BookingCreated) -> 
         lines.append(f"Майстер: {view.staff_name}")
     if booking.client_phone:
         lines.append(f"Телефон: {booking.client_phone}")
-    buttons: Keyboard = [[Button("Скасувати запис", f"b:cancel:{booking.id}")]]
+    buttons: Keyboard = [[Button("❌ Скасувати запис", f"b:cancel:{booking.id}")]]
     if booking.status == "pending_prepayment" and view.prepayment_due:
         due = view.prepayment_due
         lines.append(
             f"⏳ Чекає на передоплату {money(view.prepayment_amount, view.currency, 'uk')} "
             f"до {day_label(due.date(), 'uk')} {hhmm(due)}."
         )
-        buttons.insert(0, [Button("Оплату отримано", f"b:paid:{booking.id}")])
+        buttons.insert(0, [Button("💳 Оплату отримано", f"b:paid:{booking.id}")])
     else:
         lines.append("Записав бот. Нічого робити не треба.")
     if event.message_id:
@@ -243,7 +243,7 @@ async def _booking_rescheduled(app, session, tenant, cfg, event: BookingReschedu
         f"Було: {_when(cfg, old)}\nСтало: {_when(cfg, new)}"
     )
     await notify_members(
-        app, session, tenant, cfg, text, [[Button("Скасувати запис", f"b:cancel:{new.id}")]]
+        app, session, tenant, cfg, text, [[Button("❌ Скасувати запис", f"b:cancel:{new.id}")]]
     )
 
 
@@ -259,8 +259,11 @@ async def _request_created(app, session, tenant, cfg, event: RequestCreated) -> 
         f"{view.service_name}\nБажаний час: {booking.requested_time_text}"
     )
     buttons: Keyboard = [
-        [Button("Підтвердити", f"r:ok:{booking.id}")],
-        [Button("Інший час", f"r:other:{booking.id}"), Button("Відхилити", f"r:no:{booking.id}")],
+        [Button("✅ Підтвердити", f"r:ok:{booking.id}")],
+        [
+            Button("🕐 Інший час", f"r:other:{booking.id}"),
+            Button("✖️ Відхилити", f"r:no:{booking.id}"),
+        ],
     ]
     await notify_members(app, session, tenant, cfg, text, buttons)
 
@@ -293,10 +296,10 @@ async def _handoff(app, session, tenant, cfg, event: HandoffStarted) -> None:
                 f"({channel}). Коли майстер відповість: /forget {client.id}",
             )
     buttons: Keyboard = [
-        [Button("Відповісти", f"c:reply:{conversation.id}")],
+        [Button("💬 Відповісти", f"c:reply:{conversation.id}")],
         [
-            Button("Взяти діалог", f"c:take:{conversation.id}"),
-            Button("Повернути бота", f"c:bot:{conversation.id}"),
+            Button("✋ Взяти діалог", f"c:take:{conversation.id}"),
+            Button("🤖 Повернути бота", f"c:bot:{conversation.id}"),
         ],
     ]
     await notify_members(app, session, tenant, cfg, "\n".join(lines), buttons)
@@ -322,15 +325,15 @@ def draft_keyboard(draft: Draft) -> Keyboard:
     if tool and tool != "handoff_to_human":
         # Side effects need an exact approval: no free-text edit of a booking confirmation.
         return [
-            [Button("Відправити", f"d:send:{draft.id}")],
+            [Button("✅ Відправити", f"d:send:{draft.id}")],
             [
-                Button("Відповісти самій", f"c:reply:{draft.conversation_id}"),
-                Button("Відхилити", f"d:no:{draft.id}"),
+                Button("💬 Відповісти самостійно", f"c:reply:{draft.conversation_id}"),
+                Button("✖️ Відхилити", f"d:no:{draft.id}"),
             ],
         ]
     return [
-        [Button("Відправити", f"d:send:{draft.id}")],
-        [Button("Редагувати", f"d:edit:{draft.id}"), Button("Відхилити", f"d:no:{draft.id}")],
+        [Button("✅ Відправити", f"d:send:{draft.id}")],
+        [Button("✏️ Редагувати", f"d:edit:{draft.id}"), Button("✖️ Відхилити", f"d:no:{draft.id}")],
     ]
 
 

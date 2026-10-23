@@ -180,7 +180,12 @@ async def test_pause_resume_reports_waiting_clients(app, llm) -> None:
 async def test_mode_switch_and_audit(app) -> None:
     studio = await make_studio(app)
     result = await actions.set_mode(app, OWNER_TG, "offhours")
-    assert "вночі" in result.text
+    assert result.replace and "Зараз: 🌙 Ніч і зайняті години" in result.text
+    assert [b.text for row in result.buttons for b in row][:3] == [
+        "✍️ Чернетка",
+        "✓ 🌙 Ніч і зайняті години",
+        "🚀 Автопілот",
+    ]
     async with app.session_factory() as session:
         audit = await session.scalar(select(AuditLog).where(AuditLog.action == "tenant.mode"))
     assert audit.details == {"mode": "offhours"} and audit.tenant_id == studio.tenant_id
@@ -231,7 +236,7 @@ async def test_prepayment_flow(app, llm, clock) -> None:
         booking = (await session.scalars(select(Booking))).one()
     assert booking.status == "pending_prepayment"
     paid = await actions.confirm_payment(app, booking.id, OWNER_TG)
-    assert "клієнтці надіслано підтвердження" in paid.text
+    assert "клієнтці надіслано підтвердження" in paid.note
     assert business_sent(app)[-1].startswith("Оплату отримано, запис підтверджено")
 
 
@@ -260,7 +265,7 @@ async def test_lead_capture_request_confirmed_by_master(app, llm, clock) -> None
     booking_id = int(note.buttons[0][0].data.split(":")[-1])
     await actions.start_confirm_request(app, booking_id, OWNER_TG)
     bad = await actions.handle_text(app, OWNER_TG, "коли зможу")
-    assert "Не зрозумів" in bad.text
+    assert "Не вдалося розпізнати" in bad.text
     done = await actions.handle_text(app, OWNER_TG, "23.10 15:30")
     assert done.text.startswith("Запис підтверджено")
     assert business_sent(app)[-1].startswith(
@@ -383,6 +388,75 @@ async def test_sandbox_shows_typing(app, llm) -> None:
         row.reply_due_at = app.clock.now()
     assert await process_due_replies(app) == 1
     assert len(shown) >= 1 and app.channels["sandbox"].texts()
+
+
+async def test_home_screen_shows_status_and_buttons(app) -> None:
+    await make_studio(app)
+    home = await actions.home(app, OWNER_TG)
+    assert home.text.startswith("🏠 Demo Nail Studio") and "🟢 Бот працює" in home.text
+    assert "Записів через бота сьогодні: 0" in home.text
+    data = [b.data for row in home.buttons for b in row]
+    assert data == [
+        "menu:today",
+        "menu:stats",
+        "menu:mode",
+        "menu:pause",
+        "menu:sandbox",
+        "menu:data",
+        "menu:change",
+        "menu:help",
+    ]
+    await actions.pause(app, OWNER_TG)
+    paused = await actions.home(app, OWNER_TG)
+    assert "⏸ Бот на паузі" in paused.text and "menu:resume" in [
+        b.data for row in paused.buttons for b in row
+    ]
+    assert (await actions.home(app, 777)).text == actions.NOT_LINKED
+
+
+async def test_take_and_return_edit_the_pressed_message(app) -> None:
+    studio = await make_studio(app, kind="telegram_business")
+    cid = await client_says(app, studio, "Привіт")
+    taken = await actions.take_conversation(app, cid, OWNER_TG)
+    assert taken.text is None and "Діалог ваш" in taken.note
+    assert [b.data for row in taken.buttons for b in row] == [f"c:reply:{cid}", f"c:bot:{cid}"]
+    back = await actions.return_bot(app, cid, OWNER_TG)
+    assert "лише на нові" in back.note and back.toast
+
+
+async def test_cancel_booking_question_can_be_declined(app) -> None:
+    kept = await actions.keep_booking(app, 1, OWNER_TG)
+    assert kept.replace and kept.text.startswith("Добре")
+
+
+async def test_buttons_edit_in_place(app) -> None:
+    """The pressed message changes (no new message, no stale keyboard) and a toast shows."""
+    from types import SimpleNamespace
+
+    from app.owner.bot import answer_button
+
+    answers: list[str | None] = []
+
+    async def answer(text=None):
+        answers.append(text)
+
+    message = SimpleNamespace(
+        text="🙋 Потрібна ваша відповідь", chat=SimpleNamespace(id=OWNER_TG), message_id=42
+    )
+    query = SimpleNamespace(answer=answer, message=message)
+    await make_studio(app)
+    result = actions.Result(
+        None,
+        note="✋ Діалог ваш.",
+        buttons=[[actions.Button("🤖 Повернути бота", "c:bot:1")]],
+        toast="Діалог ваш",
+    )
+    await answer_button(app, query, result)
+    assert answers == ["Діалог ваш"] and app.notifier.sent == []
+    assert app.notifier.edits == [(OWNER_TG, 42, "🙋 Потрібна ваша відповідь\n\n✋ Діалог ваш.")]
+    # Plain results still arrive as a new message.
+    await answer_button(app, query, actions.Result("Готово."))
+    assert app.notifier.texts() == ["Готово."]
 
 
 async def test_stats_text(app, llm, clock) -> None:

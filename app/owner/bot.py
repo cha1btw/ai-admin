@@ -24,6 +24,30 @@ async def send_result(app: AppContext, chat_id: int, result: Result | None) -> N
         await app.notifier.edit(chat, message_id, text)
 
 
+async def answer_button(app: AppContext, query: CallbackQuery, result: Result | None) -> None:
+    """Show a button's result where the master pressed it: no pile of new messages and no
+    stale buttons that could be pressed twice."""
+    await query.answer(result.toast if result else None)
+    if result is None:
+        return
+    message = query.message
+    if message is None:
+        return
+    chat_id, message_id = message.chat.id, message.message_id
+    if result.replace and result.text:
+        await app.notifier.edit(chat_id, message_id, result.text, buttons=result.buttons)
+    elif result.note:
+        original = getattr(message, "text", None) or ""
+        await app.notifier.edit(
+            chat_id, message_id, f"{original}\n\n{result.note}", buttons=result.buttons
+        )
+        # The pressed message may be one of several copies of a draft; edits cover the rest.
+        for chat, other_id, text in result.edits:
+            await app.notifier.edit(chat, other_id, text)
+    else:
+        await send_result(app, chat_id, result)
+
+
 def _name(message: Message) -> str | None:
     user = message.from_user
     if user is None:
@@ -61,7 +85,17 @@ async def start_with_token(message: Message, command: CommandObject, app: AppCon
 
 
 async def start(message: Message, app: AppContext) -> None:
-    await help_command(message, app)
+    user = message.from_user.id
+    async with app.session_factory() as session, session.begin():
+        tenant = await actions.current_tenant(session, app, user)
+    if tenant is None:
+        await help_command(message, app)
+        return
+    await send_result(app, message.chat.id, await actions.home(app, user))
+
+
+async def menu(message: Message, app: AppContext) -> None:
+    await send_result(app, message.chat.id, await actions.home(app, message.from_user.id))
 
 
 async def help_command(message: Message, app: AppContext) -> None:
@@ -75,7 +109,9 @@ async def help_command(message: Message, app: AppContext) -> None:
     text = (f"Студія: {tenant.name}\n\n" if tenant else "") + actions.HELP
     if actions.is_admin(app, user):
         text += "\n\n" + actions.ADMIN_HELP
-    await app.notifier.send(message.chat.id, text)
+    await app.notifier.send(
+        message.chat.id, text, buttons=[actions.MENU_ROW] if tenant is not None else None
+    )
 
 
 async def mode(message: Message, app: AppContext) -> None:
@@ -248,8 +284,11 @@ async def on_button(query: CallbackQuery, app: AppContext) -> None:
     action, _, ident = rest.partition(":")
     result: Result | None = None
     try:
-        if data == "noop":
-            result = Result("Добре.")
+        if kind == "menu":
+            await on_menu(query, app, rest)
+            return
+        if kind == "sb":
+            result = await _sandbox_button(app, user, rest)
         elif kind == "d":
             handler = {
                 "send": actions.approve_draft,
@@ -268,6 +307,7 @@ async def on_button(query: CallbackQuery, app: AppContext) -> None:
             handler = {
                 "cancel": actions.ask_cancel_booking,
                 "cx": actions.cancel_booking_by_studio,
+                "keep": actions.keep_booking,
                 "paid": actions.confirm_payment,
             }[action]
             result = await handler(app, int(ident), user)
@@ -289,9 +329,54 @@ async def on_button(query: CallbackQuery, app: AppContext) -> None:
     except (KeyError, ValueError):
         await query.answer("Невідома дія")
         return
-    await query.answer()
-    if query.message is not None:
+    await answer_button(app, query, result)
+
+
+async def _sandbox_button(app: AppContext, user: int, action: str) -> Result:
+    if action == "restart":
+        return await actions.start_sandbox(app, user, restart=True)
+    if action == "stop":
+        return await actions.stop_sandbox(app, user)
+    raise KeyError(action)
+
+
+async def on_menu(query: CallbackQuery, app: AppContext, action: str) -> None:
+    """Main-screen buttons. "home" redraws the screen in place; the rest answer below it."""
+    user = query.from_user.id
+    handlers = {
+        "home": actions.home,
+        "today": actions.today_text,
+        "mode": actions.show_mode,
+        "pause": actions.pause,
+        "resume": actions.resume,
+        "sandbox": actions.start_sandbox,
+        "data": actions.show_data,
+        "change": actions.start_change_prompt,
+    }
+    if action == "stats":
+        result = await actions.show_stats(app, user, 7)
+    elif action == "help":
+        result = Result(actions.HELP, buttons=[actions.MENU_ROW])
+    elif action in handlers:
+        result = await handlers[action](app, user)
+    else:
+        await query.answer("Невідома дія")
+        return
+    if action == "home":
+        result.replace = True
+    elif action in ("pause", "resume") and query.message is not None:
+        # The home screen shows the status: refresh it, then confirm below.
         await send_result(app, query.message.chat.id, result)
+        refreshed = await actions.home(app, user)
+        await app.notifier.edit(
+            query.message.chat.id,
+            query.message.message_id,
+            refreshed.text or "",
+            buttons=refreshed.buttons,
+        )
+        await query.answer()
+        return
+    await answer_button(app, query, result)
 
 
 async def _switch(app: AppContext, user: int, tenant_id: int) -> Result:
@@ -325,6 +410,7 @@ async def on_text(message: Message, app: AppContext) -> None:
 # The "/" menu masters see in Owner Bot (set by `python -m app.cli telegram set-webhooks`).
 # Founders' commands stay out of it: they are in /help for founders only.
 MENU = [
+    ("menu", "Головне меню"),
     ("today", "Записи на сьогодні"),
     ("mode", "Режим роботи бота"),
     ("pause", "Зупинити бота"),
@@ -353,6 +439,7 @@ def build_owner_dispatcher() -> Dispatcher:
     commands.message.register(start_with_token, CommandStart(deep_link=True))
     commands.message.register(start, CommandStart())
     commands.message.register(help_command, Command("help"))
+    commands.message.register(menu, Command("menu"))
     commands.message.register(mode, Command("mode"))
     commands.message.register(pause, Command("pause"))
     commands.message.register(resume, Command("resume"))
