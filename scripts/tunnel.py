@@ -15,6 +15,8 @@ import sys
 from pathlib import Path
 
 PORT = 8000
+# 127.0.0.1, not "localhost": another app (a Docker container) can listen on the same port on
+# IPv6, and "localhost" would reach it first.
 URL = re.compile(r"https://[a-z0-9-]+\.trycloudflare\.com")
 FILE = Path(__file__).resolve().parent.parent / ".public_url"
 
@@ -23,7 +25,7 @@ def main() -> int:
     FILE.unlink(missing_ok=True)  # an address left by a crashed run is dead
     try:
         proc = subprocess.Popen(
-            ["cloudflared", "tunnel", "--no-autoupdate", "--url", f"http://localhost:{PORT}"],
+            ["cloudflared", "tunnel", "--no-autoupdate", "--url", f"http://127.0.0.1:{PORT}"],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,

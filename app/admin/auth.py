@@ -41,7 +41,7 @@ def login_link(settings: Settings, telegram_id: int, base_url: str | None = None
         {"admin": telegram_id, "purpose": "login", "nonce": secrets.token_urlsafe(12)},
         LOGIN_TTL,
     )
-    base = (base_url or public_base(settings) or "http://localhost:8000").rstrip("/")
+    base = (base_url or public_base(settings) or "http://127.0.0.1:8000").rstrip("/")
     return f"{base}/admin/login?token={token}"
 
 

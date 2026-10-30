@@ -29,6 +29,9 @@ sites: ## Rebuild the landing, push to the public repo cha1btw/ai-admin-sites
 	uv run python scripts/build_sites.py
 	cd dist/sites && $(GIT) add -A && ($(GIT) diff --cached --quiet || $(GIT) commit -qm "Update sites") && $(GIT) push -q origin main
 
+dev: migrate ## Everything for development in one terminal: API, worker, polling (TUNNEL=1 adds the public address)
+	uv run python scripts/dev.py
+
 tunnel: ## Temporary public address for the admin panel (needs `make run`); get the link with /admin in Owner Bot
 	uv run python scripts/tunnel.py
 
@@ -73,4 +76,4 @@ webhooks: ## Production: point Telegram bots at PUBLIC_BASE_URL
 backup: ## Production: database backup (see deploy/backup.sh)
 	deploy/backup.sh
 
-.PHONY: help install setup db migrate run admin sites tunnel worker poll test lint fmt eval chat demo tenant-validate tenant-load tenant-preview webhooks backup
+.PHONY: help install setup db migrate run admin sites dev tunnel worker poll test lint fmt eval chat demo tenant-validate tenant-load tenant-preview webhooks backup
