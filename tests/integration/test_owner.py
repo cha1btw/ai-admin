@@ -361,6 +361,29 @@ async def test_sandbox_explains_handoff_and_keeps_answering(app, llm) -> None:
     assert app.channels["sandbox"].texts()[-1].endswith("Чим ще можу допомогти?")
 
 
+async def test_sandbox_example_question_buttons(app, llm) -> None:
+    from app.owner import bot
+
+    await make_studio(app)
+    started = await actions.start_sandbox(app, OWNER_TG)
+    data = [b.data for row in started.buttons for b in row]
+    assert data == [f"sb:try:{i}" for i in range(5)] + ["sb:restart", "sb:stop"]
+    assert all(len(d.encode()) <= 64 for d in data)
+    llm.add(say("Манікюр з гель-лаком коштує 900 грн."))
+    shown = await bot._sandbox_button(app, OWNER_TG, "try:0")
+    assert shown.text == "👤 Які у вас послуги й ціни?"  # the question appears in the chat
+    async with app.session_factory() as session:
+        conversation = (await session.scalars(select(Conversation))).one()
+        assert conversation.is_sandbox and conversation.reply_due_at is not None
+    await process_conversation(app, conversation.id)
+    assert app.channels["sandbox"].texts()[-1].endswith("900 грн.")
+    # Outside the sandbox the button only explains what to do first.
+    await actions.stop_sandbox(app, OWNER_TG)
+    outside = await actions.sandbox_try(app, OWNER_TG, 0)
+    assert outside.text is None and "пісочницю" in outside.toast
+    assert (await actions.sandbox_try(app, OWNER_TG, 99)).text is None
+
+
 async def test_sandbox_works_while_paused(app, llm) -> None:
     await make_studio(app)
     await actions.pause(app, OWNER_TG)

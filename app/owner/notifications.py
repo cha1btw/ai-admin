@@ -56,6 +56,16 @@ ACTION_NOTES = {
     "request_booking": "Після «Відправити» бот створить заявку.",
     "handoff_to_human": "Після «Відправити» діалог перейде до вас, бот замовкне.",
 }
+# Example client messages for the sandbox: one tap instead of typing, and they cover the cases a
+# master should see once (prices, free times, address, a discount that must go to a human, AI
+# disclosure). Index in the callback data (sb:try:N) keeps it under Telegram's 64 bytes.
+SANDBOX_TRY: list[tuple[str, str]] = [
+    ("💰 Послуги й ціни", "Які у вас послуги й ціни?"),
+    ("📅 Вільні вікна", "Є вільне вікно на завтра?"),
+    ("📍 Адреса", "Де ви знаходитесь і як вас знайти?"),
+    ("🙋 Знижка", "Чи можна зі знижкою?"),
+    ("🤖 Ви бот?", "Ви бот чи людина?"),
+]
 SANDBOX_KEYBOARD: Keyboard = [
     [Button("🔄 Почати заново", "sb:restart"), Button("🚪 Вийти", "sb:stop")]
 ]
@@ -303,6 +313,13 @@ async def _handoff(app, session, tenant, cfg, event: HandoffStarted) -> None:
         ],
     ]
     await notify_members(app, session, tenant, cfg, "\n".join(lines), buttons)
+
+
+def sandbox_start_keyboard() -> Keyboard:
+    """Example questions in two columns, then restart and exit."""
+    buttons = [Button(label, f"sb:try:{i}") for i, (label, _) in enumerate(SANDBOX_TRY)]
+    rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
+    return rows + SANDBOX_KEYBOARD
 
 
 async def _sandbox_handoff_note(app: AppContext, chat_id: int, event: HandoffStarted) -> None:

@@ -64,7 +64,12 @@ from app.db.models import (
     Tenant,
     TenantMember,
 )
-from app.owner.notifications import SANDBOX_KEYBOARD, deliver, dispatch_events
+from app.owner.notifications import (
+    SANDBOX_TRY,
+    deliver,
+    dispatch_events,
+    sandbox_start_keyboard,
+)
 from app.owner.notifier import Button, Keyboard
 from app.owner.parsing import parse_day_range, parse_local_datetime
 from app.owner.reports import stats_text
@@ -1160,8 +1165,9 @@ async def start_sandbox(app: AppContext, telegram_id: int, *, restart: bool = Fa
         set_state(account, sandbox_tenant=tenant.id, awaiting=None)
     if restart:
         return Result(
-            "🔄 Почали заново: бот не пам'ятає попередньої розмови. Пишіть як клієнтка.",
-            buttons=SANDBOX_KEYBOARD,
+            "🔄 Почали заново: бот не пам'ятає попередньої розмови. Пишіть як клієнтка "
+            "або оберіть приклад питання.",
+            buttons=sandbox_start_keyboard(),
         )
     return Result(
         "🧪 Пісочниця\n"
@@ -1169,8 +1175,9 @@ async def start_sandbox(app: AppContext, telegram_id: int, *, restart: bool = Fa
         "студії. Його відповіді позначені 🤖.\n\n"
         "• записи пробні, календар не змінюється\n"
         "• сповіщень про записи не буде\n"
-        "• працює, навіть коли бот на паузі",
-        buttons=SANDBOX_KEYBOARD,
+        "• працює, навіть коли бот на паузі\n\n"
+        "Напишіть своє питання або оберіть приклад нижче.",
+        buttons=sandbox_start_keyboard(),
     )
 
 
@@ -1179,6 +1186,18 @@ async def stop_sandbox(app: AppContext, telegram_id: int) -> Result:
         account = await ensure_owner(session, telegram_id, None)
         set_state(account, sandbox_tenant=None)
     return Result("Пісочницю закрито.")
+
+
+async def sandbox_try(app: AppContext, telegram_id: int, index: int) -> Result:
+    """A ready-made client question from the sandbox buttons."""
+    async with app.session_factory() as session:
+        account = await session.get(OwnerAccount, telegram_id)
+        tenant_id = (account.state or {}).get("sandbox_tenant") if account else None
+    if tenant_id is None or not 0 <= index < len(SANDBOX_TRY):
+        return Result(None, toast="Спочатку відкрийте пісочницю: кнопка «🧪 Пісочниця»")
+    phrase = SANDBOX_TRY[index][1]
+    await sandbox_message(app, telegram_id, tenant_id, Inbound(str(telegram_id), None, phrase))
+    return Result(f"👤 {phrase}")  # shown as the client's message, so the reply has its question
 
 
 async def sandbox_message(

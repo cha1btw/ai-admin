@@ -337,6 +337,8 @@ async def on_button(query: CallbackQuery, app: AppContext) -> None:
 
 
 async def _sandbox_button(app: AppContext, user: int, action: str) -> Result:
+    if action.startswith("try:"):
+        return await actions.sandbox_try(app, user, int(action.removeprefix("try:")))
     if action == "restart":
         return await actions.start_sandbox(app, user, restart=True)
     if action == "stop":
