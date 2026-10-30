@@ -43,7 +43,14 @@ class LLMResponse:
 
 
 class LLMError(Exception):
-    """The provider failed; the caller answers with a safe template and hands off."""
+    """The provider failed; the caller answers with a safe template and hands off.
+
+    transient: the service was busy or unreachable (429, 5xx, timeout), so another model may
+    answer; a bad request or a wrong key would fail the same way."""
+
+    def __init__(self, message: str = "", *, transient: bool = False) -> None:
+        super().__init__(message)
+        self.transient = transient
 
 
 class LLMTimeout(LLMError):

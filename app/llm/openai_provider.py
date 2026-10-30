@@ -12,7 +12,18 @@ from typing import Any
 import openai
 from openai import AsyncOpenAI
 
+from app.core.logging import get_logger
 from app.llm.base import ChatMessage, LLMError, LLMResponse, LLMTimeout, ToolCall, ToolSpec
+
+log = get_logger(__name__)
+
+# Failures of the service, not of our request: a second model may well answer. A bad request or
+# a wrong key (4xx other than 429) would fail the same way, so those are not retried.
+TRANSIENT = (
+    openai.RateLimitError,
+    openai.InternalServerError,
+    openai.APIConnectionError,  # includes APITimeoutError
+)
 
 
 class OpenAIProvider:
@@ -25,21 +36,25 @@ class OpenAIProvider:
         temperature: float | None = None,
         max_completion_tokens: int = 600,
         base_url: str | None = None,
+        fallback_model: str | None = None,
         client: AsyncOpenAI | None = None,
     ) -> None:
         self.model_name = model
+        self._fallback_model = fallback_model or None
         self._temperature = temperature
         self._max_tokens = max_completion_tokens
         self.native = is_openai(base_url)
         self._client = client or AsyncOpenAI(
-            api_key=api_key, base_url=base_url, timeout=timeout_s, max_retries=1
+            api_key=api_key,
+            base_url=base_url,
+            timeout=timeout_s,
+            # With a fallback model the fallback is the retry: a rate-limited or hanging first
+            # model must not cost two full timeouts before the second one is tried.
+            max_retries=0 if fallback_model else 1,
         )
 
     async def complete(self, messages: list[ChatMessage], tools: list[ToolSpec]) -> LLMResponse:
-        kwargs: dict[str, Any] = {
-            "model": self.model_name,
-            "messages": [_to_openai(m) for m in messages],
-        }
+        kwargs: dict[str, Any] = {"messages": [_to_openai(m) for m in messages]}
         if self.native:
             kwargs["max_completion_tokens"] = self._max_tokens
         else:
@@ -67,11 +82,12 @@ class OpenAIProvider:
 
         started = time.perf_counter()
         try:
-            response = await self._client.chat.completions.create(**kwargs)
-        except openai.APITimeoutError as exc:
-            raise LLMTimeout(str(exc)) from exc
-        except openai.APIError as exc:
-            raise LLMError(f"{type(exc).__name__}: {exc}") from exc
+            response = await self._create(self.model_name, kwargs)
+        except (LLMTimeout, LLMError) as exc:
+            if self._fallback_model is None or not exc.transient:
+                raise
+            log.warning("llm.fallback", primary=self.model_name, error=type(exc).__name__)
+            response = await self._create(self._fallback_model, kwargs)
         latency_ms = int((time.perf_counter() - started) * 1000)
 
         if not response.choices:
@@ -106,9 +122,20 @@ class OpenAIProvider:
             tool_calls=calls,
             tokens_in=usage.prompt_tokens if usage else 0,
             tokens_out=usage.completion_tokens if usage else 0,
-            model=response.model or self.model_name,
+            model=response.model or self._used_model,
             latency_ms=latency_ms,
         )
+
+    async def _create(self, model: str, kwargs: dict[str, Any]):
+        self._used_model = model
+        try:
+            return await self._client.chat.completions.create(model=model, **kwargs)
+        except openai.APITimeoutError as exc:
+            raise LLMTimeout(str(exc), transient=True) from exc
+        except openai.APIError as exc:
+            raise LLMError(
+                f"{type(exc).__name__}: {exc}", transient=isinstance(exc, TRANSIENT)
+            ) from exc
 
 
 def is_openai(base_url: str | None) -> bool:

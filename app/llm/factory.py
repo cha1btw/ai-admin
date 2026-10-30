@@ -40,6 +40,7 @@ def build_llm(
         api_key=key.get_secret_value() if key else "not-needed",
         base_url=settings.llm_base_url,
         model=settings.llm_model,
+        fallback_model=settings.llm_fallback_model or None,
         timeout_s=timeout_s or settings.llm_timeout_s,
         temperature=settings.llm_temperature,
         max_completion_tokens=max_completion_tokens or settings.llm_max_completion_tokens,

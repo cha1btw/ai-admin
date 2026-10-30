@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     llm_model: str = ""
     llm_temperature: float | None = None  # some models accept only the default temperature
     llm_max_completion_tokens: int = 600
+    # Second model tried once when the first is rate-limited, down or too slow. Empty: off.
+    # Check it with `make eval` first: the prompt was tuned and evaluated on LLM_MODEL only.
+    llm_fallback_model: str = ""
     llm_timeout_s: float = 25.0
     openai_api_key: SecretStr | None = None
     # Any OpenAI-compatible Chat Completions API; empty means OpenAI itself. Examples:

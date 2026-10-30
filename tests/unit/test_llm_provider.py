@@ -2,10 +2,11 @@
 
 from types import SimpleNamespace
 
+import openai
 import pytest
 
 from app.config import Settings
-from app.llm.base import ChatMessage, ToolSpec
+from app.llm.base import ChatMessage, LLMError, ToolSpec
 from app.llm.factory import LLMConfigError, build_llm
 from app.llm.openai_provider import OpenAIProvider
 
@@ -106,3 +107,93 @@ async def test_gemini_thought_signature_goes_back_with_the_call() -> None:
     await llm.complete(follow_up, [TOOL])
     sent_call = completions.kwargs["messages"][2]["tool_calls"][0]
     assert sent_call["extra_content"] == SIGNATURE
+
+
+class FlakyCompletions:
+    """Fails with the given error for the first model, answers for any other."""
+
+    def __init__(self, error: Exception) -> None:
+        self.error = error
+        self.models: list[str] = []
+
+    async def create(self, **kwargs):
+        self.models.append(kwargs["model"])
+        if kwargs["model"] == "primary":
+            raise self.error
+        message = SimpleNamespace(content="Добрий день!", tool_calls=[])
+        return SimpleNamespace(choices=[SimpleNamespace(message=message)], usage=None, model="")
+
+
+def flaky(error: Exception, fallback: str | None = "backup"):
+    completions = FlakyCompletions(error)
+    client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
+    llm = OpenAIProvider(
+        api_key="k", model="primary", base_url=GEMINI, fallback_model=fallback, client=client
+    )
+    return llm, completions
+
+
+def api_error(cls, status: int):
+    import httpx
+
+    request = httpx.Request("POST", "https://x/chat/completions")
+    response = httpx.Response(status, request=request)
+    return cls("boom", response=response, body=None)
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        api_error(openai.RateLimitError, 429),
+        api_error(openai.InternalServerError, 503),
+        openai.APITimeoutError(request=None),
+    ],
+)
+async def test_busy_primary_falls_back_to_the_second_model(error: Exception) -> None:
+    llm, completions = flaky(error)
+    response = await llm.complete(MESSAGES, [])
+    assert completions.models == ["primary", "backup"]
+    assert response.content == "Добрий день!" and response.model == "backup"
+
+
+async def test_bad_request_is_not_retried_with_the_fallback() -> None:
+    llm, completions = flaky(api_error(openai.BadRequestError, 400))
+    with pytest.raises(LLMError):
+        await llm.complete(MESSAGES, [])
+    assert completions.models == ["primary"]
+
+
+async def test_without_a_fallback_the_error_is_raised() -> None:
+    llm, completions = flaky(api_error(openai.RateLimitError, 429), fallback=None)
+    with pytest.raises(LLMError):
+        await llm.complete(MESSAGES, [])
+    assert completions.models == ["primary"]
+
+
+async def test_fallback_failure_is_an_llm_error() -> None:
+    error = api_error(openai.InternalServerError, 503)
+    completions = FlakyCompletions(error)
+    completions.models = []
+
+    async def always_fail(**kwargs):
+        completions.models.append(kwargs["model"])
+        raise error
+
+    completions.create = always_fail
+    client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
+    llm = OpenAIProvider(api_key="k", model="primary", fallback_model="backup", client=client)
+    with pytest.raises(LLMError):
+        await llm.complete(MESSAGES, [])
+    assert completions.models == ["primary", "backup"]  # one retry, not a loop
+
+
+def test_factory_passes_the_fallback_model() -> None:
+    settings = Settings(
+        _env_file=None,
+        llm_model="primary",
+        llm_fallback_model="backup",
+        llm_base_url=GEMINI,
+        llm_api_key="k",
+    )
+    llm = build_llm(settings)
+    assert llm._fallback_model == "backup"
