@@ -7,6 +7,7 @@ processed after the reply's id is stored, so it is never mistaken for the master
 import asyncio
 import contextlib
 import signal
+import time
 
 from aiogram.types import Update
 from sqlalchemy import Interval, func, or_, select
@@ -15,6 +16,7 @@ from app.brain.orchestrator import process_conversation
 from app.channels.base import show_typing
 from app.config import get_settings
 from app.context import AppContext
+from app.core.heartbeat import BEAT_EVERY_S, beat
 from app.core.logging import configure_logging, get_logger
 from app.db.models import ChannelAccount, Client, Conversation, InboundEvent, Tenant
 from app.db.session import make_engine, make_session_factory
@@ -130,10 +132,29 @@ async def keep_typing(app: AppContext, conversation_id: int) -> None:
         log.warning("typing.failed", conversation_id=conversation_id)
 
 
+LOOP_STUCK_S = 300  # the main loop has not finished an iteration for this long: stop the pulse
+
+
+async def pulse(app: AppContext, progress: dict[str, float], stop: asyncio.Event) -> None:
+    """Separate from the main loop, which can spend a minute in a slow model call. The pulse
+    stops when the loop itself is stuck, so a hung worker shows up as a dead one."""
+    while not stop.is_set():
+        if time.monotonic() - progress["loop"] < LOOP_STUCK_S:
+            try:
+                await beat(app.session_factory)
+            except Exception:
+                log.exception("heartbeat.failed")
+        with contextlib.suppress(TimeoutError):
+            await asyncio.wait_for(stop.wait(), timeout=BEAT_EVERY_S)
+
+
 async def run(app: AppContext, bots: Bots, stop: asyncio.Event) -> None:
     scheduler = Scheduler(app)
     log.info("worker.started", channels=sorted(app.channels))
+    progress = {"loop": time.monotonic()}
+    pulse_task = asyncio.create_task(pulse(app, progress, stop))
     while not stop.is_set():
+        progress["loop"] = time.monotonic()
         try:
             worked = await process_inbound(app, bots) + await process_due_replies(app)
             await scheduler.tick()
@@ -144,6 +165,7 @@ async def run(app: AppContext, bots: Bots, stop: asyncio.Event) -> None:
         if not worked:
             with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(stop.wait(), timeout=app.settings.worker_poll_interval_s)
+    await pulse_task
     log.info("worker.stopped")
 
 

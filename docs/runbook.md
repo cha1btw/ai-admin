@@ -8,7 +8,7 @@
 4. Короткая команда (Compose берёт переменные только из явно указанного `.env`):
    `alias dc='docker compose -f deploy/docker-compose.prod.yml --env-file .env'`.
    Запуск: `dc up -d --build` (миграции применяет сервис `migrate`).
-5. Проверка: `curl https://<домен>/health` возвращает `{"status":"ok","db":true}`.
+5. Проверка: `curl https://<домен>/health` возвращает `{"status":"ok","db":true,"worker":"ok"}`. Если воркер молчит дольше 90 секунд, `/health` отвечает 503 (`"worker":"stale"`), а API шлёт алерт в `ALERT_CHAT_ID`; когда воркер вернулся, придёт второе сообщение.
 6. Вебхуки Telegram: `dc run --rm api python -m app.cli telegram set-webhooks`.
 7. Демо-студия: `dc run --rm api python -m app.cli tenant load studios/demo_studio.json --demo`.
 8. Бэкап: cron `0 3 * * * /path/to/repo/deploy/backup.sh` и `RCLONE_REMOTE` для копии вне сервера. Раз в месяц: `deploy/restore.sh <файл>`.

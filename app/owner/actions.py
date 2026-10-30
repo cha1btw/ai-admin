@@ -45,6 +45,7 @@ from app.brain.templates import render
 from app.channels.accounts import ensure_account
 from app.channels.base import show_typing, window_open
 from app.context import AppContext
+from app.core.heartbeat import worker_state
 from app.db.models import (
     ACTIVE_BOOKING_STATUSES,
     AuditLog,
@@ -1313,8 +1314,14 @@ async def health_text(app: AppContext) -> str:
             .select_from(Conversation)
             .where(Conversation.reply_due_at <= app.clock.now())
         )
+    worker = {
+        "ok": "працює",
+        "stale": "НЕ ВІДПОВІДАЄ: бот не обробляє повідомлення",
+        "unknown": "ще не запускався",
+    }[await worker_state(app.session_factory)]
     return (
-        f"БД: ok\nПодії в черзі: {pending}, з помилкою: {failed}\nДіалогів чекають відповіді: {due}"
+        f"БД: ok\nВоркер: {worker}\n"
+        f"Події в черзі: {pending}, з помилкою: {failed}\nДіалогів чекають відповіді: {due}"
     )
 
 

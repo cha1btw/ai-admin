@@ -13,12 +13,13 @@ from app.tenants.loader import load_tenant
 from tests.helpers import demo_config, kyiv
 
 
-def test_health_endpoint(database_url: str) -> None:
+def test_health_endpoint(database_url: str, session_factory: SessionFactory) -> None:
+    del session_factory  # only to start from a clean database: no leftover worker pulse
     app = create_app(Settings(database_url=database_url))
     with TestClient(app) as client:
         response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "db": True}
+    assert response.json() == {"status": "ok", "db": True, "worker": "unknown"}
 
 
 async def test_load_tenant_is_versioned_and_keeps_runtime_state(
